@@ -52,44 +52,44 @@ jobs:
         with:
           script: |
             const prNumber = context.payload.number;
-            const previewUrl = `https://tools.bobwhitelock.co.uk/pr-${prNumber}/tools/todoist-triage.html`;
+            const previewUrl = `https://tools.bobwhitelock.co.uk/pr-${prNumber}/`;
 
-            const comments = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: prNumber,
-            });
+            // Poll the preview URL directly until it responds (not 404)
+            const maxAttempts = 10;
+            const pollInterval = 15000;
+            let deployed = false;
+            for (let i = 0; i < maxAttempts; i++) {
+              const res = await fetch(previewUrl);
+              if (res.ok) {
+                console.log(`Preview live after attempt ${i + 1}`);
+                deployed = true;
+                break;
+              }
+              console.log(`Attempt ${i + 1}: got ${res.status}, waiting...`);
+              if (i < maxAttempts - 1) {
+                await new Promise(r => setTimeout(r, pollInterval));
+              }
+            }
+            if (!deployed) {
+              console.log('Timed out waiting for deployment; posting comment anyway');
+            }
 
-            const marker = '<!-- deploy-preview -->';
-            const existing = comments.data.find(
-              c => c.user.type === 'Bot' && c.body.includes(marker)
-            );
-
-            const updatedAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
+            const sha = context.payload.pull_request.head.sha;
+            const shortSha = sha.slice(0, 7);
             const body = [
-              marker,
               '## Deploy Preview',
               '',
               `**Preview URL:** ${previewUrl}`,
               '',
-              `*Last updated: ${updatedAt} UTC*`,
+              `*Deployed commit: ${shortSha}*`,
             ].join('\n');
 
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: prNumber,
-                body,
-              });
-            }
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body,
+            });
 
   cleanup-preview:
     if: github.event.action == 'closed'
