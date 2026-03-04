@@ -7,7 +7,6 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  pages: read
 
 jobs:
   deploy-preview:
@@ -55,26 +54,18 @@ jobs:
             const prNumber = context.payload.number;
             const previewUrl = `https://tools.bobwhitelock.co.uk/pr-${prNumber}/`;
 
-            // Poll for Pages deployment to be live before posting
-            const startTime = new Date();
+            // Poll the preview URL directly until it responds (not 404)
             const maxAttempts = 10;
             const pollInterval = 15000;
             let deployed = false;
             for (let i = 0; i < maxAttempts; i++) {
-              const { data: deployments } = await github.request(
-                'GET /repos/{owner}/{repo}/pages/deployments',
-                { owner: context.repo.owner, repo: context.repo.repo, per_page: 5 }
-              );
-              const recent = deployments.find(d =>
-                new Date(d.created_at) >= startTime &&
-                (d.status === 'built' || d.status === 'succeed' || d.status === 'succeeded')
-              );
-              if (recent) {
-                console.log(`Pages deployment live after attempt ${i + 1}`);
+              const res = await fetch(previewUrl);
+              if (res.ok) {
+                console.log(`Preview live after attempt ${i + 1}`);
                 deployed = true;
                 break;
               }
-              console.log(`Attempt ${i + 1}: not yet deployed, waiting...`);
+              console.log(`Attempt ${i + 1}: got ${res.status}, waiting...`);
               if (i < maxAttempts - 1) {
                 await new Promise(r => setTimeout(r, pollInterval));
               }
