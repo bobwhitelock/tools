@@ -469,6 +469,69 @@
     #toast.err    { background: var(--red); pointer-events: auto; cursor: pointer; }
     #toast.ok     { background: var(--green); }
 
+    /* ── Error Modal ─────────────────────────────── */
+    .err-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.5);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .err-modal {
+      background: var(--surface);
+      border-radius: var(--r-md);
+      box-shadow: var(--sh-lg);
+      max-width: 560px;
+      width: 100%;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .err-modal-hdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .err-modal-title { font-weight: 700; font-size: 16px; color: var(--red); }
+    .err-close-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--muted);
+      padding: 4px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .err-close-btn:hover { background: var(--border); color: var(--text); }
+    .err-modal-body {
+      padding: 16px 20px;
+      font-family: monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--text);
+      overflow: auto;
+      flex: 1;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #f8f8f8;
+      margin: 0;
+    }
+    .err-modal-footer {
+      padding: 12px 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      flex-shrink: 0;
+    }
+
     @media (max-width: 480px) {
       .card-stack  { height: 370px; }
       .task-title  { font-size: 17px; }
@@ -622,6 +685,24 @@
   </div>
 </div>
 
+<!-- ═══ ERROR MODAL ══════════════════════════════════════════════════════ -->
+<div id="error-modal" class="err-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="err-modal-title">
+  <div class="err-modal">
+    <div class="err-modal-hdr">
+      <span id="err-modal-title" class="err-modal-title">Error</span>
+      <button class="err-close-btn" onclick="closeErrorModal()" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <pre id="err-modal-body" class="err-modal-body"></pre>
+    <div class="err-modal-footer">
+      <button id="err-copy-btn" class="btn btn-secondary btn-sm" onclick="copyError()">Copy error</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ TOAST ════════════════════════════════════════════════════════════ -->
 <div id="toast"></div>
 
@@ -722,7 +803,7 @@ async function handleAuth() {
     localStorage.setItem('todoist_token', t);
   } catch (e) {
     S.token = '';
-    toast(e.toString(), 'err');
+    showError(e);
     showView('view-auth');
   }
 }
@@ -794,7 +875,7 @@ async function selectFilter(id) {
       startTinder();
     }
   } catch (e) {
-    toast('Failed to load tasks: ' + e.message, 'err');
+    showError(e, 'Failed to load tasks');
     showFilters();
   }
 }
@@ -1030,7 +1111,7 @@ async function finishSwiping() {
 
     showResultsView(labelName);
   } catch (e) {
-    toast('Error creating label: ' + e.message, 'err');
+    showError(e, 'Error creating label');
     showFilters();
   }
 }
@@ -1117,6 +1198,40 @@ document.getElementById('toast').addEventListener('click', () => {
   clearTimeout(toastTimer);
   document.getElementById('toast').className = '';
 });
+
+function showError(e, prefix) {
+  const title  = prefix || 'Error';
+  const detail = e.stack || e.toString();
+  const full   = prefix ? `${prefix}\n\n${detail}` : detail;
+  document.getElementById('err-modal-title').textContent = title;
+  document.getElementById('err-modal-body').textContent  = full;
+  document.getElementById('err-copy-btn').textContent    = 'Copy error';
+  document.getElementById('error-modal').style.display   = 'flex';
+}
+
+function closeErrorModal() {
+  document.getElementById('error-modal').style.display = 'none';
+}
+
+async function copyError() {
+  const text = document.getElementById('err-modal-body').textContent;
+  const btn  = document.getElementById('err-copy-btn');
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // Fallback for browsers without clipboard API
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity  = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
+  btn.textContent = 'Copied!';
+  setTimeout(() => { btn.textContent = 'Copy error'; }, 1500);
+}
 
 function iconHash() {
   return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
