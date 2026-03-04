@@ -1076,9 +1076,6 @@ function buildCard(task, layer) {
 
     <div class="card-top">
       <span class="priority-badge ${pInfo.cls}">${pInfo.label}</span>
-      ${task.labels && task.labels.length
-        ? `<span style="font-size:12px;color:var(--muted)">${task.labels.length} label${task.labels.length > 1 ? 's' : ''}</span>`
-        : ''}
     </div>
 
     <a class="task-title" href="${taskUrl}" target="_blank" rel="noopener"
