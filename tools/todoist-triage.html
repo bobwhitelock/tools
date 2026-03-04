@@ -881,7 +881,7 @@ async function selectFilter(id) {
     ]);
     S.tasks    = tasksResp.results || [];
     S.projects = {};
-    (projectsResp.results || projectsResp).forEach(p => { S.projects[p.id] = p; });
+    projectsResp.results.forEach(p => { S.projects[p.id] = p; });
 
     if (!S.tasks.length) {
       document.getElementById('empty-filter-name').textContent = f.name;
@@ -1105,7 +1105,7 @@ async function finishSwiping() {
     const baseName = `tasks-${dateStr}`;
 
     const existingResp = await get('/labels');
-    const names        = new Set((existingResp.results || existingResp).map(l => l.name));
+    const names        = new Set(existingResp.results.map(l => l.name));
 
     let labelName = baseName;
     let n = 1;
