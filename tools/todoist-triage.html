@@ -769,8 +769,7 @@ const S = {
   history:        [],   // array of 'left'|'right' for undo
   // Pre-fetch caches (Promises); cleared when returning to filters view
   taskCache:      {},   // filter_id -> Promise<task[]>
-  projectsCache:  null, // Promise<project[]>
-  syncCache:      null, // Promise<sync data>
+  syncCache:      null, // Promise<sync data — items + projects>
 };
 
 /* Drag state */
@@ -914,9 +913,8 @@ async function loadFilters() {
 
 function showFilters() {
   // Clear pre-fetch caches so returning after a triage session gets fresh data
-  S.taskCache     = {};
-  S.projectsCache = null;
-  S.syncCache     = null;
+  S.taskCache  = {};
+  S.syncCache  = null;
   renderFilters();
   showView('view-filters');
 }
@@ -944,8 +942,7 @@ function renderFilters() {
 
 function loadFilterCounts() {
   // Pre-warm shared caches used by selectFilter
-  if (!S.projectsCache) S.projectsCache = getAll('/projects');
-  if (!S.syncCache)     S.syncCache     = syncResources(['items']);
+  if (!S.syncCache) S.syncCache = syncResources(['items', 'projects']);
 
   // Kick off a full task fetch for each filter (same request selectFilter will use)
   S.filters.forEach(f => {
@@ -979,13 +976,12 @@ async function selectFilter(id) {
   loading('Loading tasks…');
   try {
     // Reuse pre-fetched promises from the filters page (may already be resolved)
-    const tasksPromise    = S.taskCache[f.id]  || getAll(`/tasks/filter?query=${encodeURIComponent(f.query)}`);
-    const projectsPromise = S.projectsCache    || getAll('/projects');
-    const syncPromise     = S.syncCache        || syncResources(['items']);
-    const [tasks, projects, syncData] = await Promise.all([tasksPromise, projectsPromise, syncPromise]);
+    const tasksPromise = S.taskCache[f.id] || getAll(`/tasks/filter?query=${encodeURIComponent(f.query)}`);
+    const syncPromise  = S.syncCache       || syncResources(['items', 'projects']);
+    const [tasks, syncData] = await Promise.all([tasksPromise, syncPromise]);
     S.tasks    = tasks;
     S.projects = {};
-    projects.forEach(p => { S.projects[p.id] = p; });
+    (syncData.projects || []).forEach(p => { S.projects[p.id] = p; });
 
     // Build subtask count map from all tasks (sync API uses 'checked' for completion)
     S.subtaskMap = {};
