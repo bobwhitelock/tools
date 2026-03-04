@@ -735,7 +735,7 @@ const S = {
 };
 
 /* Drag state */
-const drag = { on: false, sx: 0, dx: 0 };
+const drag = { on: false, sx: 0, dx: 0, swiping: false };
 
 /* ── API helpers ───────────────────────────────────────────────────── */
 async function get(path) {
@@ -1070,8 +1070,10 @@ function onDragEnd() {
 }
 
 function doSwipe(dir) {
+  if (drag.swiping) return;
   const c = document.getElementById('front-card');
   if (!c) return;
+  drag.swiping = true;
 
   if (dir === 'right') {
     S.saved.push(S.tasks[S.idx]);
@@ -1090,6 +1092,7 @@ function doSwipe(dir) {
 
   setTimeout(() => {
     S.idx++;
+    drag.swiping = false;
     updateProgress();
     renderCards();
   }, 380);
@@ -1197,7 +1200,8 @@ function priorityInfo(p) {
 }
 
 function fmtDue(due) {
-  const d    = new Date((due.datetime || due.date).replace('Z',''));
+  // Parse datetime as UTC (keep Z); parse date-only as local midnight (add T00:00:00)
+  const d    = due.datetime ? new Date(due.datetime) : new Date(due.date + 'T00:00:00');
   const now  = new Date();
   const tod  = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const tom  = new Date(tod); tom.setDate(tom.getDate() + 1);
