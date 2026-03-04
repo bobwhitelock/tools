@@ -757,16 +757,20 @@ const COLORS = {
 
 /* ── App state ─────────────────────────────────────────────────────── */
 const S = {
-  token:       localStorage.getItem('todoist_token') || '',
-  filters:     [],
-  tasks:       [],
-  projects:    {},
-  subtaskMap:  {},   // task_id -> incomplete subtask count
-  parentMap:   {},   // task_id -> parent task object
-  selFilter:   null,
-  idx:         0,
-  saved:       [],
-  history:     [],   // array of 'left'|'right' for undo
+  token:          localStorage.getItem('todoist_token') || '',
+  filters:        [],
+  tasks:          [],
+  projects:       {},
+  subtaskMap:     {},   // task_id -> incomplete subtask count
+  parentMap:      {},   // task_id -> parent task object
+  selFilter:      null,
+  idx:            0,
+  saved:          [],
+  history:        [],   // array of 'left'|'right' for undo
+  // Pre-fetch caches (Promises); cleared when returning to filters view
+  taskCache:      {},   // filter_id -> Promise<task[]>
+  projectsCache:  null, // Promise<project[]>
+  syncCache:      null, // Promise<sync data>
 };
 
 /* Drag state */
@@ -896,6 +900,10 @@ async function loadFilters() {
 }
 
 function showFilters() {
+  // Clear pre-fetch caches so returning after a triage session gets fresh data
+  S.taskCache     = {};
+  S.projectsCache = null;
+  S.syncCache     = null;
   renderFilters();
   showView('view-filters');
 }
@@ -922,18 +930,20 @@ function renderFilters() {
 }
 
 function loadFilterCounts() {
-  // Fetch the first page of each filter in parallel; if there's a next page show "N+"
+  // Pre-warm shared caches used by selectFilter
+  if (!S.projectsCache) S.projectsCache = getAll('/projects');
+  if (!S.syncCache)     S.syncCache     = syncResources(['items']);
+
+  // Kick off a full task fetch for each filter (same request selectFilter will use)
   S.filters.forEach(f => {
-    fetch(`${API}/tasks/filter?query=${encodeURIComponent(f.query)}`, {
-      headers: { Authorization: `Bearer ${S.token}` },
-    })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (!data) return;
+    if (!S.taskCache[f.id]) {
+      S.taskCache[f.id] = getAll(`/tasks/filter?query=${encodeURIComponent(f.query)}`);
+    }
+    S.taskCache[f.id]
+      .then(tasks => {
         const el = document.getElementById(`count-${f.id}`);
         if (!el) return;
-        const count = data.results.length;
-        el.textContent = data.next_cursor ? `${count}+` : String(count);
+        el.textContent = String(tasks.length);
         el.classList.add('loaded');
       })
       .catch(() => {
@@ -954,11 +964,11 @@ async function selectFilter(id) {
 
   loading('Loading tasks…');
   try {
-    const [tasks, projects, syncData] = await Promise.all([
-      getAll(`/tasks/filter?query=${encodeURIComponent(f.query)}`),
-      getAll('/projects'),
-      syncResources(['items']),
-    ]);
+    // Reuse pre-fetched promises from the filters page (may already be resolved)
+    const tasksPromise    = S.taskCache[f.id]  || getAll(`/tasks/filter?query=${encodeURIComponent(f.query)}`);
+    const projectsPromise = S.projectsCache    || getAll('/projects');
+    const syncPromise     = S.syncCache        || syncResources(['items']);
+    const [tasks, projects, syncData] = await Promise.all([tasksPromise, projectsPromise, syncPromise]);
     S.tasks    = tasks;
     S.projects = {};
     projects.forEach(p => { S.projects[p.id] = p; });
