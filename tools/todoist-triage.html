@@ -54,6 +54,7 @@
       font-weight: 700;
       color: var(--red);
       text-decoration: none;
+      cursor: pointer;
     }
     .hdr-logo svg { width: 26px; height: 26px; flex-shrink: 0; }
     #hdr-right { display: flex; align-items: center; gap: 10px; }
@@ -215,7 +216,7 @@
     /* Card stack */
     .card-stack {
       width: 100%;
-      height: 420px;
+      height: 460px;
       position: relative;
       margin-bottom: 22px;
     }
@@ -297,7 +298,9 @@
       -webkit-line-clamp: 4;
       -webkit-box-orient: vertical;
       overflow: hidden;
+      text-decoration: none;
     }
+    .task-title:hover { text-decoration: underline; color: var(--red); }
     .task-meta { display: flex; flex-direction: column; gap: 7px; }
     .meta-row {
       display: flex;
@@ -308,6 +311,8 @@
     }
     .meta-row svg { width: 14px; height: 14px; flex-shrink: 0; }
     .meta-row.overdue { color: var(--red); }
+    .meta-row.deadline { color: #c07000; }
+    .meta-row.deadline.overdue { color: var(--red); }
     .task-desc {
       margin-top: 14px;
       padding-top: 14px;
@@ -333,12 +338,19 @@
       padding: 2px 9px;
       color: var(--muted);
     }
+    .recurring-icon {
+      display: inline-flex;
+      align-items: center;
+      margin-left: 2px;
+      color: var(--blue);
+      opacity: 0.85;
+    }
 
     /* Action buttons */
     .actions {
       display: flex;
       align-items: center;
-      gap: 22px;
+      gap: 16px;
     }
     .act-btn {
       width: 62px; height: 62px;
@@ -353,8 +365,11 @@
     }
     .act-btn:hover  { transform: scale(1.08); box-shadow: var(--sh-lg); }
     .act-btn:active { transform: scale(.95); }
-    .act-skip { background: #fff; color: var(--red); border: 2px solid #eee; }
-    .act-save { background: var(--green); color: #fff; width: 70px; height: 70px; }
+    .act-skip  { background: #fff; color: var(--red); border: 2px solid #eee; }
+    .act-save  { background: var(--green); color: #fff; width: 70px; height: 70px; }
+    .act-undo  { background: #fff; color: var(--muted); border: 2px solid #eee; width: 48px; height: 48px; }
+    .act-undo:hover { color: var(--text); }
+    .act-undo:disabled { opacity: 0.35; cursor: not-allowed; transform: none; box-shadow: var(--sh-md); }
 
     .kbd-hint {
       margin-top: 14px;
@@ -533,7 +548,7 @@
     }
 
     @media (max-width: 480px) {
-      .card-stack  { height: 370px; }
+      .card-stack  { height: 420px; }
       .task-title  { font-size: 17px; }
       .auth-card   { padding: 28px 22px; }
     }
@@ -543,7 +558,7 @@
 
 <!-- ═══ HEADER ═══════════════════════════════════════════════════════════ -->
 <header class="hdr">
-  <a href="#" class="hdr-logo" onclick="return false;">
+  <a href="#" class="hdr-logo" onclick="logoClick(); return false;">
     <svg viewBox="0 0 24 24" fill="currentColor">
       <path d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" opacity=".15"/>
       <polyline points="6,9 10,13 18,7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -612,6 +627,11 @@
     <div id="card-stack" class="card-stack"></div>
 
     <div class="actions">
+      <button id="undo-btn" class="act-btn act-undo" onclick="undoSwipe()" title="Undo (U)" disabled>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
+        </svg>
+      </button>
       <button class="act-btn act-skip" onclick="doSwipe('left')" title="Skip (←)">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -627,6 +647,7 @@
     <div class="kbd-hint">
       <span><kbd>←</kbd> Skip</span>
       <span><kbd>→</kbd> Save</span>
+      <span><kbd>U</kbd> Undo</span>
     </div>
   </div>
 </div>
@@ -725,13 +746,16 @@ const COLORS = {
 
 /* ── App state ─────────────────────────────────────────────────────── */
 const S = {
-  token:      localStorage.getItem('todoist_token') || '',
-  filters:    [],
-  tasks:      [],
-  projects:   {},
-  selFilter:  null,
-  idx:        0,
-  saved:      [],
+  token:       localStorage.getItem('todoist_token') || '',
+  filters:     [],
+  tasks:       [],
+  projects:    {},
+  subtaskMap:  {},   // task_id -> incomplete subtask count
+  parentMap:   {},   // task_id -> parent task object
+  selFilter:   null,
+  idx:         0,
+  saved:       [],
+  history:     [],   // array of 'left'|'right' for undo
 };
 
 /* Drag state */
@@ -801,6 +825,11 @@ function updateHeader(viewId) {
   } else {
     el.innerHTML = `<button class="btn btn-secondary btn-sm" onclick="showFilters()">← Filters</button>`;
   }
+}
+
+function logoClick() {
+  // Navigate to filters if logged in, otherwise do nothing
+  if (S.token) showFilters();
 }
 
 function loading(msg = 'Loading…') {
@@ -884,18 +913,38 @@ async function selectFilter(id) {
   if (!f) return;
 
   S.selFilter = f;
-  S.idx   = 0;
-  S.saved = [];
+  S.idx     = 0;
+  S.saved   = [];
+  S.history = [];
 
   loading('Loading tasks…');
   try {
-    const [tasks, projects] = await Promise.all([
+    const [tasks, projects, syncData] = await Promise.all([
       getAll(`/tasks/filter?query=${encodeURIComponent(f.query)}`),
       getAll('/projects'),
+      syncResources(['items']),
     ]);
     S.tasks    = tasks;
     S.projects = {};
     projects.forEach(p => { S.projects[p.id] = p; });
+
+    // Build subtask count map from all tasks (sync API uses 'checked' for completion)
+    S.subtaskMap = {};
+    S.parentMap  = {};
+    const allItems = syncData.items || [];
+    const itemById = {};
+    allItems.forEach(item => { itemById[item.id] = item; });
+    allItems.forEach(item => {
+      if (item.parent_id && !item.is_deleted && !item.checked) {
+        S.subtaskMap[item.parent_id] = (S.subtaskMap[item.parent_id] || 0) + 1;
+      }
+    });
+    // Build parent map: for each task in our filter list, find its parent name
+    tasks.forEach(t => {
+      if (t.parent_id && itemById[t.parent_id]) {
+        S.parentMap[t.id] = itemById[t.parent_id];
+      }
+    });
 
     if (!S.tasks.length) {
       document.getElementById('empty-filter-name').textContent = f.name;
@@ -931,6 +980,10 @@ function updateProgress() {
   const sc = document.getElementById('saved-counter');
   sc.textContent = `✓ ${S.saved.length} saved`;
   sc.classList.toggle('visible', S.saved.length > 0);
+
+  // Update undo button state
+  const undoBtn = document.getElementById('undo-btn');
+  if (undoBtn) undoBtn.disabled = S.history.length === 0;
 }
 
 function renderCards() {
@@ -956,11 +1009,16 @@ function renderCards() {
 }
 
 function buildCard(task, layer) {
-  const proj  = S.projects[task.project_id];
-  const pInfo = priorityInfo(task.priority);
-  const due   = task.due ? fmtDue(task.due) : null;
+  const proj       = S.projects[task.project_id];
+  const pInfo      = priorityInfo(task.priority);
+  const due        = task.due ? fmtDue(task.due) : null;
+  const deadline   = task.deadline ? fmtDeadline(task.deadline) : null;
+  const subtasks   = S.subtaskMap[task.id] || 0;
+  const parent     = S.parentMap[task.id] || null;
+  const duration   = task.duration ? fmtDuration(task.duration) : null;
+  const taskUrl    = `https://app.todoist.com/app/task/${task.id}`;
 
-  const div  = document.createElement('div');
+  const div = document.createElement('div');
   div.className = `task-card ${layer}`;
 
   div.innerHTML = `
@@ -978,9 +1036,15 @@ function buildCard(task, layer) {
         : ''}
     </div>
 
-    <div class="task-title">${esc(task.content)}</div>
+    <a class="task-title" href="${taskUrl}" target="_blank" rel="noopener"
+       onclick="event.stopPropagation()">${esc(task.content)}</a>
 
     <div class="task-meta">
+      ${parent ? `
+        <div class="meta-row">
+          ${iconSubtaskOf()}
+          <span style="color:var(--muted)">${esc(parent.content)}</span>
+        </div>` : ''}
       ${proj ? `
         <div class="meta-row">
           ${iconHash()}
@@ -990,6 +1054,27 @@ function buildCard(task, layer) {
         <div class="meta-row${due.overdue ? ' overdue' : ''}">
           ${iconCal()}
           <span>${esc(due.text)}${due.overdue ? ' (overdue)' : ''}</span>
+          ${task.due.is_recurring ? `<span class="recurring-icon" title="Recurring">${iconRepeat()}</span>` : ''}
+        </div>` : (task.due && task.due.is_recurring ? `
+        <div class="meta-row">
+          ${iconCal()}
+          <span class="recurring-icon">${iconRepeat()}</span>
+          <span>Recurring</span>
+        </div>` : '')}
+      ${deadline ? `
+        <div class="meta-row deadline${deadline.overdue ? ' overdue' : ''}">
+          ${iconDeadline()}
+          <span>Deadline: ${esc(deadline.text)}${deadline.overdue ? ' (overdue)' : ''}</span>
+        </div>` : ''}
+      ${subtasks > 0 ? `
+        <div class="meta-row">
+          ${iconSubtasks()}
+          <span>${subtasks} incomplete subtask${subtasks > 1 ? 's' : ''}</span>
+        </div>` : ''}
+      ${duration ? `
+        <div class="meta-row">
+          ${iconClock()}
+          <span>${esc(duration)}</span>
         </div>` : ''}
     </div>
 
@@ -1012,6 +1097,9 @@ function attachDrag(card) {
 }
 
 function onDragStart(e) {
+  // Don't start drag if clicking on the task title link
+  if (e.target.closest('a.task-title')) return;
+
   const { clientX } = e.touches ? e.touches[0] : e;
   drag.on = true;
   drag.sx = clientX;
@@ -1027,9 +1115,11 @@ function onDragStart(e) {
 
 function onDragMove(e) {
   if (!drag.on) return;
-  if (e.cancelable) e.preventDefault();
   const { clientX } = e.touches ? e.touches[0] : e;
   drag.dx = clientX - drag.sx;
+
+  // Only prevent default scroll when horizontal drag is significant
+  if (e.cancelable && Math.abs(drag.dx) > 8) e.preventDefault();
 
   const c = document.getElementById('front-card');
   if (!c) return;
@@ -1090,6 +1180,8 @@ function doSwipe(dir) {
     c.style.opacity    = '0';
   }
 
+  S.history.push(dir);
+
   setTimeout(() => {
     S.idx++;
     drag.swiping = false;
@@ -1098,12 +1190,25 @@ function doSwipe(dir) {
   }, 380);
 }
 
+function undoSwipe() {
+  if (S.history.length === 0 || drag.swiping) return;
+
+  const last = S.history.pop();
+  if (last === 'right') {
+    S.saved.pop();
+  }
+  S.idx--;
+  updateProgress();
+  renderCards();
+}
+
 /* Keyboard */
 document.addEventListener('keydown', e => {
   const tv = document.getElementById('view-tinder');
   if (!tv.classList.contains('active')) return;
   if (e.key === 'ArrowRight') doSwipe('right');
   if (e.key === 'ArrowLeft')  doSwipe('left');
+  if (e.key === 'u' || e.key === 'U') undoSwipe();
 });
 
 /* ── Finish / label creation ───────────────────────────────────────── */
@@ -1191,17 +1296,59 @@ function esc(s) {
 function priorityInfo(p) {
   // API: 4=P1, 3=P2, 2=P3, 1=P4
   const m = {
-    4: { cls:'p1', label:'P1 — Urgent' },
-    3: { cls:'p2', label:'P2 — High'   },
-    2: { cls:'p3', label:'P3 — Medium' },
-    1: { cls:'p4', label:'P4 — Normal' },
+    4: { cls:'p1', label:'P1' },
+    3: { cls:'p2', label:'P2' },
+    2: { cls:'p3', label:'P3' },
+    1: { cls:'p4', label:'P4' },
   };
   return m[p] || m[1];
 }
 
 function fmtDue(due) {
-  // Parse datetime as UTC (keep Z); parse date-only as local midnight (add T00:00:00)
-  const d    = due.datetime ? new Date(due.datetime) : new Date(due.date + 'T00:00:00');
+  // Parse datetime correctly:
+  // due.datetime is UTC with Z e.g. "2026-03-04T09:00:00Z"
+  // due.date may be "YYYY-MM-DD" or "YYYY-MM-DDTHH:MM:SS" (local time, no Z)
+  let d;
+  if (due.datetime) {
+    d = new Date(due.datetime); // UTC string with Z
+  } else if (due.date && due.date.includes('T')) {
+    // Date with time but no timezone — treat as local
+    d = new Date(due.date);
+  } else {
+    // Date only — treat as local midnight
+    d = new Date(due.date + 'T00:00:00');
+  }
+
+  if (isNaN(d.getTime())) return { text: due.date || due.string || 'Unknown date', overdue: false };
+
+  const now  = new Date();
+  const tod  = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tom  = new Date(tod); tom.setDate(tom.getDate() + 1);
+  const dday = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+  const hasTime = !!(due.datetime || (due.date && due.date.includes('T')));
+
+  let text;
+  if (+dday === +tod) text = 'Today';
+  else if (+dday === +tom) text = 'Tomorrow';
+  else text = d.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+  });
+
+  if (hasTime) {
+    text += ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  }
+
+  return { text, overdue: dday < tod };
+}
+
+function fmtDeadline(deadline) {
+  // deadline: { date: "YYYY-MM-DD", lang: "en" }
+  if (!deadline || !deadline.date) return null;
+  const d    = new Date(deadline.date + 'T00:00:00');
+  if (isNaN(d.getTime())) return null;
   const now  = new Date();
   const tod  = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const tom  = new Date(tod); tom.setDate(tom.getDate() + 1);
@@ -1210,9 +1357,26 @@ function fmtDue(due) {
   let text;
   if (+dday === +tod) text = 'Today';
   else if (+dday === +tom) text = 'Tomorrow';
-  else text = d.toLocaleDateString('en-US', { month:'short', day:'numeric', year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+  else text = d.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+  });
 
   return { text, overdue: dday < tod };
+}
+
+function fmtDuration(duration) {
+  if (!duration || !duration.amount) return null;
+  const { amount, unit } = duration;
+  if (unit === 'minute') {
+    if (amount < 60) return `${amount} min`;
+    const h = Math.floor(amount / 60);
+    const m = amount % 60;
+    return m ? `${h}h ${m}m` : `${h}h`;
+  }
+  if (unit === 'day') return `${amount} day${amount !== 1 ? 's' : ''}`;
+  return `${amount} ${unit}`;
 }
 
 let toastTimer;
@@ -1266,6 +1430,7 @@ async function copyError() {
   setTimeout(() => { btn.textContent = 'Copy error'; }, 1500);
 }
 
+/* ── Icons ─────────────────────────────────────────────────────────── */
 function iconHash() {
   return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
     <line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/>
@@ -1278,6 +1443,43 @@ function iconCal() {
     <rect x="3" y="4" width="18" height="18" rx="2"/>
     <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
     <line x1="3" y1="10" x2="21" y2="10"/>
+  </svg>`;
+}
+
+function iconDeadline() {
+  return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="12" y1="8" x2="12" y2="12"/>
+    <line x1="12" y1="16" x2="12.01" y2="16"/>
+  </svg>`;
+}
+
+function iconRepeat() {
+  return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+    <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+  </svg>`;
+}
+
+function iconSubtasks() {
+  return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/>
+    <line x1="8" y1="18" x2="21" y2="18"/>
+    <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/>
+    <line x1="3" y1="18" x2="3.01" y2="18"/>
+  </svg>`;
+}
+
+function iconSubtaskOf() {
+  return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>
+  </svg>`;
+}
+
+function iconClock() {
+  return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <polyline points="12 6 12 12 16 14"/>
   </svg>`;
 }
 
