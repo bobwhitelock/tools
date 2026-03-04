@@ -711,7 +711,7 @@
 ════════════════════════════════════════════════════════════════════════ -->
 <script>
 /* ── Constants ─────────────────────────────────────────────────────── */
-const API          = 'https://api.todoist.com/rest/v2';
+const API          = 'https://api.todoist.com/api/v1';
 const SWIPE_THRESH = 80;
 
 const COLORS = {
@@ -752,6 +752,20 @@ async function post(path, body) {
   });
   if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
   if (r.status === 204) return null;
+  return r.json();
+}
+
+async function syncResources(resourceTypes) {
+  const body = new URLSearchParams({
+    sync_token:     '*',
+    resource_types: JSON.stringify(resourceTypes),
+  });
+  const r = await fetch(`${API}/sync`, {
+    method:  'POST',
+    headers: { Authorization:`Bearer ${S.token}`, 'Content-Type':'application/x-www-form-urlencoded' },
+    body:    body.toString(),
+  });
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
   return r.json();
 }
 
@@ -821,7 +835,8 @@ function logout() {
 /* ── Filters ───────────────────────────────────────────────────────── */
 async function loadFilters() {
   loading('Loading your filters…');
-  S.filters = await get('/filters');
+  const data = await syncResources(['filters']);
+  S.filters = (data.filters || []).filter(f => !f.is_deleted);
   renderFilters();
   showView('view-filters');
 }
@@ -860,11 +875,11 @@ async function selectFilter(id) {
 
   loading('Loading tasks…');
   try {
-    const [tasks, projects] = await Promise.all([
-      get(`/tasks?filter=${encodeURIComponent(f.query)}`),
+    const [tasksResp, projects] = await Promise.all([
+      get(`/tasks/filter?query=${encodeURIComponent(f.query)}`),
       get('/projects'),
     ]);
-    S.tasks    = tasks;
+    S.tasks    = tasksResp.results || [];
     S.projects = {};
     projects.forEach(p => { S.projects[p.id] = p; });
 
