@@ -875,15 +875,15 @@ async function selectFilter(id) {
 
   loading('Loading tasks…');
   try {
-    const [tasksResp, projects] = await Promise.all([
+    const [tasksResp, projectsResp] = await Promise.all([
       get(`/tasks/filter?query=${encodeURIComponent(f.query)}`),
       get('/projects'),
     ]);
     S.tasks    = tasksResp.results || [];
     S.projects = {};
-    projects.forEach(p => { S.projects[p.id] = p; });
+    (projectsResp.results || projectsResp).forEach(p => { S.projects[p.id] = p; });
 
-    if (!tasks.length) {
+    if (!S.tasks.length) {
       document.getElementById('empty-filter-name').textContent = f.name;
       showView('view-empty');
     } else {
@@ -1104,8 +1104,8 @@ async function finishSwiping() {
     const dateStr  = today.toISOString().split('T')[0]; // YYYY-MM-DD
     const baseName = `tasks-${dateStr}`;
 
-    const existing = await get('/labels');
-    const names    = new Set(existing.map(l => l.name));
+    const existingResp = await get('/labels');
+    const names        = new Set((existingResp.results || existingResp).map(l => l.name));
 
     let labelName = baseName;
     let n = 1;
