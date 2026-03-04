@@ -700,7 +700,7 @@
 
       <div id="label-section" style="display:none">
         <div class="label-row">
-          <span>Label created:</span>
+          <span>Label applied:</span>
           <span id="label-pill" class="label-pill"></span>
         </div>
         <a id="todoist-link" class="todoist-link" href="#" target="_blank" rel="noopener">
@@ -714,6 +714,25 @@
     </div>
 
     <button class="btn btn-secondary btn-full" onclick="showFilters()">← Back to filters</button>
+  </div>
+</div>
+
+<!-- ═══ CONFIRM CLEAR MODAL ══════════════════════════════════════════════ -->
+<div id="confirm-overlay" class="err-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+  <div class="err-modal" style="max-width:420px">
+    <div class="err-modal-hdr">
+      <span id="confirm-title" class="err-modal-title" style="color:var(--text)">Apply label</span>
+    </div>
+    <div style="padding:16px 20px; font-size:14px; line-height:1.6">
+      <div id="confirm-existing-count" style="color:var(--muted); margin-bottom:14px"></div>
+      <label id="confirm-clear-label" style="display:flex; align-items:center; gap:10px; cursor:pointer; color:var(--text)">
+        <input id="confirm-clear-checkbox" type="checkbox" style="width:16px;height:16px;cursor:pointer;flex-shrink:0">
+        Clear from existing tasks before applying?
+      </label>
+    </div>
+    <div class="err-modal-footer">
+      <button id="confirm-apply" class="btn btn-primary" style="flex:1">Apply</button>
+    </div>
   </div>
 </div>
 
@@ -1286,43 +1305,84 @@ document.addEventListener('keydown', e => {
 });
 
 /* ── Finish / label creation ───────────────────────────────────────── */
+const LABEL_NAME = 'triaged-tasks';
+
+function confirmClearLabel(existingCount) {
+  return new Promise(resolve => {
+    const overlay    = document.getElementById('confirm-overlay');
+    const countEl    = document.getElementById('confirm-existing-count');
+    const checkbox   = document.getElementById('confirm-clear-checkbox');
+    const clearLabel = document.getElementById('confirm-clear-label');
+
+    countEl.textContent = existingCount === 0
+      ? 'No tasks currently have this label.'
+      : `${existingCount} task${existingCount !== 1 ? 's' : ''} currently ${existingCount !== 1 ? 'have' : 'has'} this label.`;
+
+    checkbox.checked  = false;
+    checkbox.disabled = existingCount === 0;
+    clearLabel.style.opacity = existingCount === 0 ? '0.4' : '1';
+    clearLabel.style.cursor  = existingCount === 0 ? 'default' : 'pointer';
+
+    overlay.style.display = 'flex';
+    document.getElementById('confirm-apply').focus();
+    document.getElementById('confirm-apply').onclick = () => {
+      const shouldClear = checkbox.checked;
+      overlay.style.display = 'none';
+      resolve(shouldClear);
+    };
+  });
+}
+
 async function finishSwiping() {
   if (!S.saved.length) {
     showResultsView(null);
     return;
   }
 
-  loading(`Applying label to ${S.saved.length} task${S.saved.length > 1 ? 's' : ''}…`);
+  loading('Checking existing label…');
+
+  let labelExists          = false;
+  let existingLabelledTasks = [];
+  try {
+    const allLabels = await getAll('/labels');
+    labelExists = !!allLabels.find(l => l.name === LABEL_NAME);
+    if (labelExists) {
+      existingLabelledTasks = await getAll(`/tasks?label=${encodeURIComponent(LABEL_NAME)}`);
+    }
+  } catch (e) {
+    showError(e, 'Error applying label');
+    showFilters();
+    return;
+  }
+
+  const shouldClear = await confirmClearLabel(existingLabelledTasks.length);
 
   try {
-    // Generate label name based on today
-    const today    = new Date();
-    const dateStr  = today.toISOString().split('T')[0]; // YYYY-MM-DD
-    const baseName = `tasks-${dateStr}`;
-
-    const existing = await getAll('/labels');
-    const names    = new Set(existing.map(l => l.name));
-
-    let labelName = baseName;
-    let n = 1;
-    while (names.has(labelName)) {
-      labelName = `${baseName}--${n}`;
-      n++;
+    if (!labelExists) {
+      await post('/labels', { name: LABEL_NAME, color: 'lime_green' });
     }
 
-    // Create label
-    await post('/labels', { name: labelName, color: 'lime_green' });
+    if (shouldClear && existingLabelledTasks.length) {
+      const n = existingLabelledTasks.length;
+      loading(`Clearing label from ${n} task${n !== 1 ? 's' : ''}…`);
+      await Promise.all(
+        existingLabelledTasks.map(t =>
+          post(`/tasks/${t.id}`, { labels: (t.labels || []).filter(l => l !== LABEL_NAME) })
+        )
+      );
+    }
 
-    // Patch tasks (preserve existing labels)
+    const m = S.saved.length;
+    loading(`Applying label to ${m} task${m !== 1 ? 's' : ''}…`);
     await Promise.all(
       S.saved.map(t =>
-        post(`/tasks/${t.id}`, { labels: [...(t.labels || []), labelName] })
+        post(`/tasks/${t.id}`, { labels: [...new Set([...(t.labels || []), LABEL_NAME])] })
       )
     );
 
-    showResultsView(labelName);
+    showResultsView(LABEL_NAME);
   } catch (e) {
-    showError(e, 'Error creating label');
+    showError(e, 'Error applying label');
     showFilters();
   }
 }
