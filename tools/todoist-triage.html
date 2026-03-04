@@ -462,9 +462,11 @@
       max-width: 90vw;
       text-align: center;
       pointer-events: none;
+      white-space: pre-wrap;
+      word-break: break-word;
     }
     #toast.show   { transform: translateX(-50%) translateY(0); }
-    #toast.err    { background: var(--red); }
+    #toast.err    { background: var(--red); pointer-events: auto; cursor: pointer; }
     #toast.ok     { background: var(--green); }
 
     @media (max-width: 480px) {
@@ -720,10 +722,7 @@ async function handleAuth() {
     localStorage.setItem('todoist_token', t);
   } catch (e) {
     S.token = '';
-    const msg = e.message?.includes('fetch') || e.message?.includes('Failed')
-      ? 'Network error — check browser console for CORS details.'
-      : `Auth failed: ${e.message}`;
-    toast(msg, 'err');
+    toast(e.toString(), 'err');
     showView('view-auth');
   }
 }
@@ -1108,8 +1107,16 @@ function toast(msg, type = '') {
   el.textContent = msg;
   el.className   = 'show ' + type;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.className = ''; }, 3500);
+  if (type === 'err') {
+    // Errors stay until tapped
+  } else {
+    toastTimer = setTimeout(() => { el.className = ''; }, 3500);
+  }
 }
+document.getElementById('toast').addEventListener('click', () => {
+  clearTimeout(toastTimer);
+  document.getElementById('toast').className = '';
+});
 
 function iconHash() {
   return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
