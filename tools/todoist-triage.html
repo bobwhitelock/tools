@@ -138,6 +138,17 @@
     .filter-item:hover { border-color: var(--red); transform: translateY(-1px); box-shadow: var(--sh-md); }
     .filter-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
     .filter-name { font-weight: 600; font-size: 15px; flex: 1; }
+    .filter-count {
+      font-size: 12px;
+      font-weight: 600;
+      background: var(--bg);
+      color: var(--muted);
+      border-radius: 10px;
+      padding: 2px 9px;
+      min-width: 28px;
+      text-align: center;
+    }
+    .filter-count.loaded { color: var(--text); background: #eee; }
     .filter-chevron { color: var(--muted); }
 
     /* ── Loading View ───────────────────────────── */
@@ -900,12 +911,36 @@ function renderFilters() {
     <div class="filter-item" onclick="selectFilter('${esc(f.id)}')">
       <div class="filter-dot" style="background:${COLORS[f.color] || '#db4035'}"></div>
       <span class="filter-name">${esc(f.name)}</span>
+      <span class="filter-count" id="count-${esc(f.id)}">…</span>
       <svg class="filter-chevron" width="16" height="16" viewBox="0 0 24 24"
            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <polyline points="9,18 15,12 9,6"/>
       </svg>
     </div>
   `).join('');
+  loadFilterCounts();
+}
+
+function loadFilterCounts() {
+  // Fetch the first page of each filter in parallel; if there's a next page show "N+"
+  S.filters.forEach(f => {
+    fetch(`${API}/tasks/filter?query=${encodeURIComponent(f.query)}`, {
+      headers: { Authorization: `Bearer ${S.token}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        const el = document.getElementById(`count-${f.id}`);
+        if (!el) return;
+        const count = data.results.length;
+        el.textContent = data.next_cursor ? `${count}+` : String(count);
+        el.classList.add('loaded');
+      })
+      .catch(() => {
+        const el = document.getElementById(`count-${f.id}`);
+        if (el) el.textContent = '?';
+      });
+  });
 }
 
 async function selectFilter(id) {
