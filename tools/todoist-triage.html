@@ -700,7 +700,7 @@
 
       <div id="label-section" style="display:none">
         <div class="label-row">
-          <span>Label created:</span>
+          <span>Label applied:</span>
           <span id="label-pill" class="label-pill"></span>
         </div>
         <a id="todoist-link" class="todoist-link" href="#" target="_blank" rel="noopener">
@@ -714,6 +714,22 @@
     </div>
 
     <button class="btn btn-secondary btn-full" onclick="showFilters()">← Back to filters</button>
+  </div>
+</div>
+
+<!-- ═══ CONFIRM CLEAR MODAL ══════════════════════════════════════════════ -->
+<div id="confirm-overlay" class="err-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+  <div class="err-modal" style="max-width:400px">
+    <div class="err-modal-hdr">
+      <span id="confirm-title" class="err-modal-title" style="color:var(--text)">Clear existing label?</span>
+    </div>
+    <div style="padding:16px 20px; color:var(--muted); font-size:14px; line-height:1.6">
+      Remove <span class="label-pill" style="font-size:12px">@triaged-tasks</span> from all existing tasks before applying it to the newly selected tasks?
+    </div>
+    <div class="err-modal-footer" style="gap:8px">
+      <button id="confirm-no"  class="btn btn-primary"    style="flex:1">No, keep existing</button>
+      <button id="confirm-yes" class="btn btn-secondary"  style="flex:1">Yes, clear first</button>
+    </div>
   </div>
 </div>
 
@@ -1286,43 +1302,64 @@ document.addEventListener('keydown', e => {
 });
 
 /* ── Finish / label creation ───────────────────────────────────────── */
+const LABEL_NAME = 'triaged-tasks';
+
+function confirmClearLabel() {
+  return new Promise(resolve => {
+    const overlay = document.getElementById('confirm-overlay');
+    overlay.style.display = 'flex';
+    // Focus the default (No) button
+    document.getElementById('confirm-no').focus();
+    document.getElementById('confirm-no').onclick = () => {
+      overlay.style.display = 'none';
+      resolve(false);
+    };
+    document.getElementById('confirm-yes').onclick = () => {
+      overlay.style.display = 'none';
+      resolve(true);
+    };
+  });
+}
+
 async function finishSwiping() {
   if (!S.saved.length) {
     showResultsView(null);
     return;
   }
 
+  const shouldClear = await confirmClearLabel();
+
   loading(`Applying label to ${S.saved.length} task${S.saved.length > 1 ? 's' : ''}…`);
 
   try {
-    // Generate label name based on today
-    const today    = new Date();
-    const dateStr  = today.toISOString().split('T')[0]; // YYYY-MM-DD
-    const baseName = `tasks-${dateStr}`;
-
+    // Ensure label exists
     const existing = await getAll('/labels');
-    const names    = new Set(existing.map(l => l.name));
-
-    let labelName = baseName;
-    let n = 1;
-    while (names.has(labelName)) {
-      labelName = `${baseName}--${n}`;
-      n++;
+    if (!existing.find(l => l.name === LABEL_NAME)) {
+      await post('/labels', { name: LABEL_NAME, color: 'lime_green' });
     }
 
-    // Create label
-    await post('/labels', { name: labelName, color: 'lime_green' });
+    // Optionally clear label from all existing tasks first
+    if (shouldClear) {
+      loading('Clearing label from existing tasks…');
+      const labelledTasks = await getAll(`/tasks?label=${encodeURIComponent(LABEL_NAME)}`);
+      await Promise.all(
+        labelledTasks.map(t =>
+          post(`/tasks/${t.id}`, { labels: (t.labels || []).filter(l => l !== LABEL_NAME) })
+        )
+      );
+      loading(`Applying label to ${S.saved.length} task${S.saved.length > 1 ? 's' : ''}…`);
+    }
 
-    // Patch tasks (preserve existing labels)
+    // Patch tasks (preserve existing labels, avoid duplicates)
     await Promise.all(
       S.saved.map(t =>
-        post(`/tasks/${t.id}`, { labels: [...(t.labels || []), labelName] })
+        post(`/tasks/${t.id}`, { labels: [...new Set([...(t.labels || []), LABEL_NAME])] })
       )
     );
 
-    showResultsView(labelName);
+    showResultsView(LABEL_NAME);
   } catch (e) {
-    showError(e, 'Error creating label');
+    showError(e, 'Error applying label');
     showFilters();
   }
 }
