@@ -378,7 +378,7 @@
     .act-btn:active { transform: scale(.95); }
     .act-skip  { background: #fff; color: var(--red); border: 2px solid #eee; }
     .act-save  { background: var(--green); color: #fff; width: 70px; height: 70px; }
-    .act-undo  { background: #fff; color: var(--muted); border: 2px solid #eee; width: 48px; height: 48px; }
+    .act-undo  { background: #fff; color: var(--muted); border: 2px solid #eee; width: 48px; height: 48px; align-self: flex-end; margin-bottom: -8px; }
     .act-undo:hover { color: var(--text); }
     .act-undo:disabled { opacity: 0.35; cursor: not-allowed; transform: none; box-shadow: var(--sh-md); }
 
@@ -638,14 +638,14 @@
     <div id="card-stack" class="card-stack"></div>
 
     <div class="actions">
-      <button id="undo-btn" class="act-btn act-undo" onclick="undoSwipe()" title="Undo (U)" disabled>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
-        </svg>
-      </button>
       <button class="act-btn act-skip" onclick="doSwipe('left')" title="Skip (←)">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+      <button id="undo-btn" class="act-btn act-undo" onclick="undoSwipe()" title="Undo (U)" disabled>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
         </svg>
       </button>
       <button class="act-btn act-save" onclick="doSwipe('right')" title="Save (→)">
@@ -657,8 +657,8 @@
 
     <div class="kbd-hint">
       <span><kbd>←</kbd> Skip</span>
-      <span><kbd>→</kbd> Save</span>
       <span><kbd>U</kbd> Undo</span>
+      <span><kbd>→</kbd> Save</span>
     </div>
   </div>
 </div>
