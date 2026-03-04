@@ -66,14 +66,14 @@
       const body   = document.getElementById('banner-body');
       banner.style.display = 'flex';
       // Start with just the number; fill in the title once the API responds
-      body.innerHTML = `Preview deploy for <span class="pr-label">PR #${currentPR}</span> — <a href="https://github.com/${REPO}/pull/${currentPR}" target="_blank" rel="noopener">view on GitHub ↗</a>`;
+      body.innerHTML = `Preview deploy for <span class="pr-label">PR #${currentPR}</span> — <a href="https://github.com/${REPO}/pull/${currentPR}">view on GitHub ↗</a>`;
 
       fetch(`https://api.github.com/repos/${REPO}/pulls/${currentPR}`)
         .then(r => r.ok ? r.json() : null)
         .then(pr => {
           if (!pr) return;
           const title = pr.title.replace(/</g,'&lt;').replace(/>/g,'&gt;');
-          body.innerHTML = `Preview deploy for <span class="pr-label">PR #${currentPR}: ${title}</span> — <a href="${pr.html_url}" target="_blank" rel="noopener">view on GitHub ↗</a>`;
+          body.innerHTML = `Preview deploy for <span class="pr-label">PR #${currentPR}: ${title}</span> — <a href="${pr.html_url}">view on GitHub ↗</a>`;
         })
         .catch(() => {});
     }
@@ -92,7 +92,7 @@
           const title = pr.title.replace(/</g,'&lt;').replace(/>/g,'&gt;');
           return `
             <li>
-              <a href="${ROOT}/pr-${pr.number}/" class="${isCurrent ? 'current-preview' : ''}" ${isCurrent ? '' : 'target="_blank" rel="noopener"'}>
+              <a href="${ROOT}/pr-${pr.number}/" class="${isCurrent ? 'current-preview' : ''}">
                 <span class="pr-num">#${pr.number}</span>
                 <span class="pr-title">${title}</span>
                 ${isCurrent ? '<span class="pr-current-badge">current</span>' : ''}
