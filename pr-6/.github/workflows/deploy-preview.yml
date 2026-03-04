@@ -52,7 +52,7 @@ jobs:
         with:
           script: |
             const prNumber = context.payload.number;
-            const previewUrl = `https://tools.bobwhitelock.co.uk/pr-${prNumber}/tools/todoist-triage.html`;
+            const previewUrl = `https://tools.bobwhitelock.co.uk/pr-${prNumber}/`;
 
             const comments = await github.rest.issues.listComments({
               owner: context.repo.owner,
