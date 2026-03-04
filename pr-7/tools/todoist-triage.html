@@ -975,31 +975,25 @@ async function selectFilter(id) {
   S.saved   = [];
   S.history = [];
 
-  loading('Loading tasks…');
-  try {
-    // Reuse pre-fetched promises from the filters page (may already be resolved)
-    const tasksPromise = S.taskCache[f.id] || getAll(`/tasks/filter?query=${encodeURIComponent(f.query)}`);
-    const syncPromise  = S.syncCache       || syncResources(['items']);
-    const [tasks, syncData] = await Promise.all([tasksPromise, syncPromise]);
-    S.tasks = tasks;
+  const tasksCached  = !!S.taskCache[f.id];
+  const tasksPromise = S.taskCache[f.id] || getAll(`/tasks/filter?query=${encodeURIComponent(f.query)}`);
+  if (!S.syncCache) S.syncCache = syncResources(['items']);
 
-    // Build subtask count map from all tasks (sync API uses 'checked' for completion)
+  if (!tasksCached) loading('Loading tasks…');
+
+  try {
+    const tasks = await tasksPromise;
+    S.tasks      = tasks;
     S.subtaskMap = {};
     S.parentMap  = {};
-    const allItems = syncData.items || [];
-    const itemById = {};
-    allItems.forEach(item => { itemById[item.id] = item; });
-    allItems.forEach(item => {
-      if (item.parent_id && !item.is_deleted && !item.checked) {
-        S.subtaskMap[item.parent_id] = (S.subtaskMap[item.parent_id] || 0) + 1;
-      }
-    });
-    // Build parent map: for each task in our filter list, find its parent name
-    tasks.forEach(t => {
-      if (t.parent_id && itemById[t.parent_id]) {
-        S.parentMap[t.id] = itemById[t.parent_id];
-      }
-    });
+
+    // Use sync data immediately if already resolved; otherwise render now
+    // and patch cards in when it arrives (avoids blocking on slow items fetch)
+    let syncData = null;
+    S.syncCache.then(d => { syncData = d; }).catch(() => {});
+    await Promise.resolve(); // flush microtask queue so above fires if resolved
+
+    if (syncData) buildSyncMaps(tasks, syncData);
 
     if (!S.tasks.length) {
       document.getElementById('empty-filter-name').textContent = f.name;
@@ -1007,10 +1001,38 @@ async function selectFilter(id) {
     } else {
       startTinder();
     }
+
+    // If sync wasn't ready yet, re-render cards once it arrives
+    if (!syncData) {
+      S.syncCache
+        .then(data => {
+          buildSyncMaps(tasks, data);
+          if (S.tasks.length && document.getElementById('view-tinder').classList.contains('active')) {
+            renderCards();
+          }
+        })
+        .catch(() => {}); // subtask info just won't show on error
+    }
   } catch (e) {
     showError(e, 'Failed to load tasks');
     showFilters();
   }
+}
+
+function buildSyncMaps(tasks, syncData) {
+  const allItems = syncData.items || [];
+  const itemById = {};
+  allItems.forEach(item => { itemById[item.id] = item; });
+  allItems.forEach(item => {
+    if (item.parent_id && !item.is_deleted && !item.checked) {
+      S.subtaskMap[item.parent_id] = (S.subtaskMap[item.parent_id] || 0) + 1;
+    }
+  });
+  tasks.forEach(t => {
+    if (t.parent_id && itemById[t.parent_id]) {
+      S.parentMap[t.id] = itemById[t.parent_id];
+    }
+  });
 }
 
 /* ── Tinder ────────────────────────────────────────────────────────── */
