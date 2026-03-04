@@ -735,13 +735,27 @@ const S = {
 };
 
 /* Drag state */
-const drag = { on: false, sx: 0, dx: 0 };
+const drag = { on: false, sx: 0, dx: 0, swiping: false };
 
 /* ── API helpers ───────────────────────────────────────────────────── */
 async function get(path) {
   const r = await fetch(API + path, { headers:{ Authorization:`Bearer ${S.token}` } });
   if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
   return r.json();
+}
+
+async function getAll(path) {
+  const items = [];
+  const sep = path.includes('?') ? '&' : '?';
+  let url = API + path;
+  while (url) {
+    const r = await fetch(url, { headers:{ Authorization:`Bearer ${S.token}` } });
+    if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+    const data = await r.json();
+    items.push(...data.results);
+    url = data.next_cursor ? `${API}${path}${sep}cursor=${encodeURIComponent(data.next_cursor)}` : null;
+  }
+  return items;
 }
 
 async function post(path, body) {
@@ -875,15 +889,15 @@ async function selectFilter(id) {
 
   loading('Loading tasks…');
   try {
-    const [tasksResp, projects] = await Promise.all([
-      get(`/tasks/filter?query=${encodeURIComponent(f.query)}`),
-      get('/projects'),
+    const [tasks, projects] = await Promise.all([
+      getAll(`/tasks/filter?query=${encodeURIComponent(f.query)}`),
+      getAll('/projects'),
     ]);
-    S.tasks    = tasksResp.results || [];
+    S.tasks    = tasks;
     S.projects = {};
     projects.forEach(p => { S.projects[p.id] = p; });
 
-    if (!tasks.length) {
+    if (!S.tasks.length) {
       document.getElementById('empty-filter-name').textContent = f.name;
       showView('view-empty');
     } else {
@@ -1056,8 +1070,10 @@ function onDragEnd() {
 }
 
 function doSwipe(dir) {
+  if (drag.swiping) return;
   const c = document.getElementById('front-card');
   if (!c) return;
+  drag.swiping = true;
 
   if (dir === 'right') {
     S.saved.push(S.tasks[S.idx]);
@@ -1076,6 +1092,7 @@ function doSwipe(dir) {
 
   setTimeout(() => {
     S.idx++;
+    drag.swiping = false;
     updateProgress();
     renderCards();
   }, 380);
@@ -1104,7 +1121,7 @@ async function finishSwiping() {
     const dateStr  = today.toISOString().split('T')[0]; // YYYY-MM-DD
     const baseName = `tasks-${dateStr}`;
 
-    const existing = await get('/labels');
+    const existing = await getAll('/labels');
     const names    = new Set(existing.map(l => l.name));
 
     let labelName = baseName;
@@ -1183,7 +1200,8 @@ function priorityInfo(p) {
 }
 
 function fmtDue(due) {
-  const d    = new Date((due.datetime || due.date).replace('Z',''));
+  // Parse datetime as UTC (keep Z); parse date-only as local midnight (add T00:00:00)
+  const d    = due.datetime ? new Date(due.datetime) : new Date(due.date + 'T00:00:00');
   const now  = new Date();
   const tod  = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const tom  = new Date(tod); tom.setDate(tom.getDate() + 1);
