@@ -905,8 +905,10 @@ function logout() {
 /* ── Filters ───────────────────────────────────────────────────────── */
 async function loadFilters() {
   loading('Loading your filters…');
-  const data = await syncResources(['filters']);
-  S.filters = (data.filters || []).filter(f => !f.is_deleted);
+  const data = await syncResources(['filters', 'projects']);
+  S.filters  = (data.filters  || []).filter(f => !f.is_deleted);
+  S.projects = {};
+  (data.projects || []).forEach(p => { S.projects[p.id] = p; });
   renderFilters();
   showView('view-filters');
 }
@@ -942,7 +944,7 @@ function renderFilters() {
 
 function loadFilterCounts() {
   // Pre-warm shared caches used by selectFilter
-  if (!S.syncCache) S.syncCache = syncResources(['items', 'projects']);
+  if (!S.syncCache) S.syncCache = syncResources(['items']);
 
   // Kick off a full task fetch for each filter (same request selectFilter will use)
   S.filters.forEach(f => {
@@ -977,11 +979,9 @@ async function selectFilter(id) {
   try {
     // Reuse pre-fetched promises from the filters page (may already be resolved)
     const tasksPromise = S.taskCache[f.id] || getAll(`/tasks/filter?query=${encodeURIComponent(f.query)}`);
-    const syncPromise  = S.syncCache       || syncResources(['items', 'projects']);
+    const syncPromise  = S.syncCache       || syncResources(['items']);
     const [tasks, syncData] = await Promise.all([tasksPromise, syncPromise]);
-    S.tasks    = tasks;
-    S.projects = {};
-    (syncData.projects || []).forEach(p => { S.projects[p.id] = p; });
+    S.tasks = tasks;
 
     // Build subtask count map from all tasks (sync API uses 'checked' for completion)
     S.subtaskMap = {};
