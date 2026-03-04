@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tools</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 20px; color: #1a1a1a; }
+    h1 { font-size: 24px; margin-bottom: 4px; }
+    h2 { font-size: 16px; font-weight: 600; color: #555; margin: 28px 0 10px; text-transform: uppercase; letter-spacing: .5px; }
+    ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+    li a { display: flex; align-items: baseline; gap: 8px; padding: 10px 14px; border-radius: 8px; text-decoration: none; color: #1a1a1a; border: 1px solid #e3e3e3; background: #fff; }
+    li a:hover { border-color: #db4035; background: #fff8f8; }
+    .pr-num { font-size: 12px; font-weight: 700; color: #888; flex-shrink: 0; }
+    .pr-title { font-size: 15px; flex: 1; }
+    .pr-current-badge { font-size: 11px; font-weight: 700; background: #e8f0ff; color: #3360e0; border-radius: 8px; padding: 2px 8px; flex-shrink: 0; align-self: center; }
+    li a.current-preview { border-color: #3360e0; background: #f4f7ff; }
+    li a.current-preview .pr-num { color: #3360e0; }
+    #pr-list .muted { color: #888; font-size: 14px; padding: 6px 0; }
+
+    #preview-banner {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #fffbe6;
+      border: 1px solid #f0d060;
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin-bottom: 28px;
+      font-size: 14px;
+    }
+    #preview-banner .banner-icon { font-size: 20px; flex-shrink: 0; }
+    #preview-banner .banner-body { flex: 1; line-height: 1.5; }
+    #preview-banner a { color: #b07000; font-weight: 600; }
+    #preview-banner .pr-label { font-weight: 700; }
+  </style>
+</head>
+<body>
+
+  <div id="preview-banner" style="display:none">
+    <div class="banner-icon">🔍</div>
+    <div class="banner-body" id="banner-body">Preview deploy</div>
+  </div>
+
+  <h1>Tools</h1>
+
+  <h2>Tools</h2>
+  <ul>
+    <li><a href="tools/todoist-triage.html">Todoist Triage</a></li>
+  </ul>
+
+  <h2>Preview Deploys</h2>
+  <ul id="pr-list"><li class="muted">Loading open PRs…</li></ul>
+
+  <script>
+    const REPO   = 'bobwhitelock/tools';
+    const ROOT   = 'https://tools.bobwhitelock.co.uk';
+
+    // Detect if we're inside a preview deploy by checking the pathname
+    const prMatch = window.location.pathname.match(/^\/pr-(\d+)\//);
+    const currentPR = prMatch ? parseInt(prMatch[1], 10) : null;
+
+    // Show banner when on a preview deploy
+    if (currentPR) {
+      const banner = document.getElementById('preview-banner');
+      const body   = document.getElementById('banner-body');
+      banner.style.display = 'flex';
+      // Start with just the number; fill in the title once the API responds
+      body.innerHTML = `Preview deploy for <span class="pr-label">PR #${currentPR}</span> — <a href="https://github.com/${REPO}/pull/${currentPR}">view on GitHub ↗</a>`;
+
+      fetch(`https://api.github.com/repos/${REPO}/pulls/${currentPR}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(pr => {
+          if (!pr) return;
+          const title = pr.title.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          body.innerHTML = `Preview deploy for <span class="pr-label">PR #${currentPR}: ${title}</span> — <a href="${pr.html_url}">view on GitHub ↗</a>`;
+        })
+        .catch(() => {});
+    }
+
+    // Render the PR list, highlighting the current preview if applicable
+    fetch(`https://api.github.com/repos/${REPO}/pulls?state=open&per_page=50`)
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(prs => {
+        const list = document.getElementById('pr-list');
+        if (!prs.length) {
+          list.innerHTML = '<li class="muted">No open PRs.</li>';
+          return;
+        }
+        list.innerHTML = prs.map(pr => {
+          const isCurrent = pr.number === currentPR;
+          const title = pr.title.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+          return `
+            <li>
+              <a href="${ROOT}/pr-${pr.number}/" class="${isCurrent ? 'current-preview' : ''}">
+                <span class="pr-num">#${pr.number}</span>
+                <span class="pr-title">${title}</span>
+                ${isCurrent ? '<span class="pr-current-badge">current</span>' : ''}
+              </a>
+            </li>
+          `;
+        }).join('');
+      })
+      .catch(() => {
+        document.getElementById('pr-list').innerHTML = '<li class="muted">Could not load PRs.</li>';
+      });
+  </script>
+</body>
+</html>
