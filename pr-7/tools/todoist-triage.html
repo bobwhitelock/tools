@@ -947,6 +947,7 @@ function loadFilterCounts() {
         el.classList.add('loaded');
       })
       .catch(() => {
+        delete S.taskCache[f.id]; // clear so selectFilter can retry fresh
         const el = document.getElementById(`count-${f.id}`);
         if (el) el.textContent = '?';
       });
