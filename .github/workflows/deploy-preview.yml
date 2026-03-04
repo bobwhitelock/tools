@@ -1,0 +1,127 @@
+name: Deploy PR preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  deploy-preview:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Deploy PR preview to gh-pages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          PR_NUMBER=${{ github.event.number }}
+          PREVIEW_DIR="pr-${PR_NUMBER}"
+
+          git fetch origin gh-pages 2>/dev/null || true
+
+          if git ls-remote --heads origin gh-pages | grep -q gh-pages; then
+            git checkout -b gh-pages origin/gh-pages
+          else
+            git checkout --orphan gh-pages
+            git rm -rf . 2>/dev/null || true
+          fi
+
+          # Replace this PR's preview directory with fresh content
+          rm -rf "${PREVIEW_DIR}"
+          mkdir -p "${PREVIEW_DIR}"
+          git archive ${{ github.event.pull_request.head.sha }} | tar -x -C "${PREVIEW_DIR}"
+
+          # Remove CNAME from the preview subdirectory (only belongs at root)
+          rm -f "${PREVIEW_DIR}/CNAME"
+
+          git add -A
+          git diff --staged --quiet && echo "No changes" || \
+            git commit -m "Deploy PR #${PR_NUMBER} preview: ${{ github.event.pull_request.head.sha }}"
+          git push origin gh-pages
+
+      - name: Post preview URL as PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.payload.number;
+            const previewUrl = `https://tools.bobwhitelock.co.uk/pr-${prNumber}/tools/todoist-triage.html`;
+
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+
+            const marker = '<!-- deploy-preview -->';
+            const existing = comments.data.find(
+              c => c.user.type === 'Bot' && c.body.includes(marker)
+            );
+
+            const updatedAt = new Date().toISOString().replace('T', ' ').slice(0, 19);
+            const body = [
+              marker,
+              '## Deploy Preview',
+              '',
+              `**Preview URL:** ${previewUrl}`,
+              '',
+              `*Last updated: ${updatedAt} UTC*`,
+            ].join('\n');
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body,
+              });
+            }
+
+  cleanup-preview:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Remove PR preview from gh-pages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          PR_NUMBER=${{ github.event.number }}
+          PREVIEW_DIR="pr-${PR_NUMBER}"
+
+          git fetch origin gh-pages 2>/dev/null || true
+
+          if ! git ls-remote --heads origin gh-pages | grep -q gh-pages; then
+            echo "No gh-pages branch, nothing to clean up"
+            exit 0
+          fi
+
+          git checkout -b gh-pages origin/gh-pages
+
+          if [ ! -d "${PREVIEW_DIR}" ]; then
+            echo "Preview directory ${PREVIEW_DIR} not found, nothing to clean up"
+            exit 0
+          fi
+
+          rm -rf "${PREVIEW_DIR}"
+          git add -A
+          git commit -m "Remove PR #${PR_NUMBER} preview"
+          git push origin gh-pages
