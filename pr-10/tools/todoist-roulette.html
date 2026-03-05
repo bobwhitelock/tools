@@ -522,7 +522,7 @@
     </div>
 
     <div class="spin-btn-wrap">
-      <button id="spin-btn" class="btn btn-primary" onclick="spinWheel()">🎰 Spin!</button>
+      <button id="spin-btn" class="btn btn-primary" onclick="spinBtnClick()">🎰 Spin!</button>
       <span id="wheel-hint" class="wheel-hint">Lands on a random task</span>
     </div>
   </div>
@@ -943,11 +943,17 @@ function drawWheel(angle) {
   ctx.stroke();
 }
 
+function spinBtnClick() {
+  if (S.spinning) stopWheelEarly();
+  else spinWheel();
+}
+
 function spinWheel() {
   if (S.spinning) return;
   S.spinning = true;
-  document.getElementById('spin-btn').disabled = true;
-  document.getElementById('wheel-hint').textContent = 'Click the wheel to stop';
+  const btn = document.getElementById('spin-btn');
+  btn.textContent = '⏹ Stop';
+  document.getElementById('wheel-hint').textContent = 'Click to stop early';
   document.getElementById('wheel-canvas').style.cursor = 'pointer';
 
   const n = S.tasks.length;
@@ -1004,8 +1010,8 @@ function stopWheelEarly() {
   const n = S.tasks.length;
   const sliceAngle = (2 * Math.PI) / n;
 
-  /* Coast distance: clamp between half a segment and two full rotations */
-  const coastDist = Math.max(sliceAngle * 0.5, Math.min(4 * Math.PI, spinVelocity * 600));
+  /* Coast distance: clamp between half a segment and four full rotations */
+  const coastDist = Math.max(sliceAngle * 0.5, Math.min(8 * Math.PI, spinVelocity * 1200));
   const rawTarget = S.wheelAngle + coastDist;
 
   /* Find the segment whose midpoint is closest to rawTarget */
@@ -1018,7 +1024,7 @@ function stopWheelEarly() {
 
   const startAngle   = S.wheelAngle;
   const dist         = newTarget - startAngle;
-  const coastDuration = Math.max(300, Math.min(1200, dist / spinVelocity * 1.5));
+  const coastDuration = Math.max(600, Math.min(2500, dist / spinVelocity * 2.0));
   const startTime    = performance.now();
 
   function coastFrame(now) {
@@ -1043,6 +1049,8 @@ function finishSpin(winnerIdx) {
   S.wheelAngle = S.wheelAngle % (2 * Math.PI);
   S.spinning   = false;
   S.winner     = S.tasks[winnerIdx];
+  const btn = document.getElementById('spin-btn');
+  btn.textContent = '🎰 Spin!';
   document.getElementById('wheel-hint').textContent = 'Lands on a random task';
   document.getElementById('wheel-canvas').style.cursor = '';
   setTimeout(() => showResult(), 500);
