@@ -640,7 +640,7 @@ async function getAll(path) {
       e.fetchUrl = url;
       e.httpStatus = r.status;
       e.responseBody = body;
-      throw e;
+throw e;
     }
     const data = await r.json();
     items.push(...data.results);
