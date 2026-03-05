@@ -766,14 +766,11 @@ function renderFilters() {
 }
 
 function loadFilterCounts() {
-  const queue = [];
-  let processing = false;
+  let delay = 0;
 
-  async function processNext() {
-    if (!queue.length) { processing = false; return; }
-    const f = queue.shift();
+  async function fetchCount(f) {
     const el = document.getElementById(`count-${f.id}`);
-    if (!el) { processNext(); return; }
+    if (!el) return;
     try {
       const tasks = await getAll(`/tasks/filter?query=${encodeURIComponent(f.query)}`);
       el.textContent = String(tasks.length);
@@ -781,7 +778,6 @@ function loadFilterCounts() {
     } catch {
       el.textContent = '?';
     }
-    setTimeout(processNext, 150);
   }
 
   const observer = new IntersectionObserver(entries => {
@@ -791,8 +787,8 @@ function loadFilterCounts() {
       const id = entry.target.dataset.filterId;
       const f = S.filters.find(x => x.id === id);
       if (!f) return;
-      queue.push(f);
-      if (!processing) { processing = true; processNext(); }
+      setTimeout(() => fetchCount(f), delay);
+      delay += 100;
     });
   });
 
