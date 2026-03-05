@@ -1010,6 +1010,7 @@ function stopWheelEarly() {
   if (!S.spinning || spinVelocity < 0.0005) return;
   cancelAnimationFrame(animFrame);
   animFrame = null;
+  const vel = spinVelocity;
   spinVelocity = 0;
   document.getElementById('spin-btn').disabled = true;
   document.getElementById('wheel-canvas').style.cursor = '';
@@ -1018,7 +1019,7 @@ function stopWheelEarly() {
   const sliceAngle = (2 * Math.PI) / n;
 
   /* Coast distance: clamp between half a segment and four full rotations */
-  const coastDist = Math.max(sliceAngle * 0.5, Math.min(8 * Math.PI, spinVelocity * 1200));
+  const coastDist = Math.max(sliceAngle * 0.5, Math.min(8 * Math.PI, vel * 1200));
   const rawTarget = S.wheelAngle + coastDist;
 
   /* Find the segment whose midpoint is closest to rawTarget */
@@ -1031,7 +1032,7 @@ function stopWheelEarly() {
 
   const startAngle   = S.wheelAngle;
   const dist         = newTarget - startAngle;
-  const coastDuration = Math.max(600, Math.min(2500, dist / spinVelocity * 2.0));
+  const coastDuration = Math.max(400, Math.min(1800, dist / vel * 1.5));
   const startTime    = performance.now();
 
   function coastFrame(now) {
@@ -1337,10 +1338,7 @@ function iconClock() {
 }
 
 /* ── Boot ──────────────────────────────────────────────────────────── */
-window.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('wheel-canvas').addEventListener('click', stopWheelEarly);
-  init();
-});
+window.addEventListener('DOMContentLoaded', init);
 </script>
 </body>
 </html>
