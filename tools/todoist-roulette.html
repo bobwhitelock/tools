@@ -616,6 +616,7 @@ const S = {
   wheelAngle: 0,
   spinning:   false,
   syncCache:  null,
+  taskCache:  {},
 };
 
 let animFrame    = null;
@@ -773,6 +774,7 @@ function loadFilterCounts() {
     if (!el) return;
     try {
       const tasks = await getAll(`/tasks/filter?query=${encodeURIComponent(f.query)}`);
+      S.taskCache[f.id] = tasks;
       el.textContent = String(tasks.length);
       el.classList.add('loaded');
     } catch {
@@ -805,10 +807,12 @@ async function selectFilter(id) {
   S.spinning   = false;
 
   if (!S.syncCache) S.syncCache = syncResources(['items']);
-  loading('Loading tasks…');
+
+  const cached = S.taskCache[f.id];
+  if (!cached) loading('Loading tasks…');
 
   try {
-    const tasks = await getAll(`/tasks/filter?query=${encodeURIComponent(f.query)}`);
+    const tasks = cached || await getAll(`/tasks/filter?query=${encodeURIComponent(f.query)}`);
     S.tasks      = tasks;
     S.subtaskMap = {};
     S.parentMap  = {};
