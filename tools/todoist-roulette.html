@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Todoist Triage</title>
+  <title>Todoist Roulette</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -85,6 +85,7 @@
     .btn-secondary:hover { background: var(--border); }
     .btn-sm { padding: 7px 14px; font-size: 13px; border-radius: 8px; }
     .btn-full { width: 100%; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
     /* ── Auth View ──────────────────────────────── */
     .auth-wrap {
@@ -170,21 +171,22 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     .loading-msg { color: var(--muted); font-size: 15px; }
 
-    /* ── Tinder View ────────────────────────────── */
-    .tinder-wrap {
+    /* ── Wheel View ─────────────────────────────── */
+    .wheel-wrap {
       max-width: 460px;
       margin: 0 auto;
-      padding: 16px 20px 24px;
+      padding: 20px 20px 32px;
       display: flex;
       flex-direction: column;
       align-items: center;
+      gap: 0;
     }
-    .tinder-hdr {
+    .wheel-hdr {
       width: 100%;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 10px;
+      margin-bottom: 20px;
     }
     .filter-badge {
       display: flex;
@@ -198,87 +200,81 @@
       font-weight: 500;
     }
     .badge-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-    .progress-txt { font-size: 13px; color: var(--muted); font-weight: 500; }
+    .wheel-task-count { font-size: 13px; color: var(--muted); font-weight: 500; }
 
-    .progress-rail {
-      width: 100%;
-      height: 4px;
-      background: var(--border);
-      border-radius: 2px;
-      margin-bottom: 18px;
-      overflow: hidden;
+    .wheel-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 24px;
     }
-    .progress-fill {
-      height: 100%;
-      background: var(--red);
-      border-radius: 2px;
-      transition: width .35s ease;
+    .wheel-pointer {
+      font-size: 26px;
+      line-height: 1;
+      margin-bottom: -4px;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,.25));
+      z-index: 10;
     }
-
-    .saved-counter {
-      font-size: 13px;
-      color: var(--green);
-      font-weight: 600;
-      opacity: 0;
-      transition: opacity .3s;
-    }
-    .saved-counter.visible { opacity: 1; }
-
-    /* Card stack */
-    .card-stack {
-      width: 100%;
-      height: 460px;
-      position: relative;
-      margin-bottom: 22px;
+    #wheel-canvas {
+      border-radius: 50%;
+      box-shadow: var(--sh-lg);
+      display: block;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
     }
 
-    .task-card {
-      position: absolute;
-      inset: 0;
+    .spin-btn-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    #spin-btn {
+      font-size: 18px;
+      padding: 14px 48px;
+      border-radius: 50px;
+      letter-spacing: 1px;
+      box-shadow: var(--sh-md);
+    }
+    #spin-btn:hover:not(:disabled) { background: var(--red-dk); box-shadow: var(--sh-lg); }
+    .wheel-hint { font-size: 13px; color: var(--muted); }
+
+    /* ── Result View ────────────────────────────── */
+    .result-wrap {
+      max-width: 480px;
+      margin: 28px auto;
+      padding: 0 20px 32px;
+    }
+    .result-header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .result-icon { font-size: 48px; margin-bottom: 10px; }
+    .result-ttl { font-size: 26px; font-weight: 800; margin-bottom: 4px; }
+    .result-sub { color: var(--muted); font-size: 14px; }
+
+    .result-card {
       background: var(--surface);
       border-radius: var(--r-lg);
       box-shadow: var(--sh-lg);
-      padding: 26px 26px 22px;
-      overflow: hidden;
-      user-select: none;
-      will-change: transform;
+      padding: 24px 24px 20px;
+      margin-bottom: 20px;
+      border: 2px solid transparent;
+      animation: popIn .4s cubic-bezier(.175,.885,.32,1.275);
     }
-    .task-card.front { z-index: 2; cursor: grab; }
-    .task-card.front:active { cursor: grabbing; }
-    .task-card.behind {
-      z-index: 1;
-      transform: scale(.95) translateY(12px);
-      pointer-events: none;
+    @keyframes popIn {
+      from { opacity: 0; transform: scale(.85) translateY(20px); }
+      to   { opacity: 1; transform: none; }
     }
 
-    /* Swipe overlays */
-    .ov {
-      position: absolute;
-      inset: 0;
-      border-radius: var(--r-lg);
+    .result-actions {
       display: flex;
-      align-items: center;
-      justify-content: center;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity .08s;
+      flex-direction: column;
+      gap: 10px;
     }
-    .ov-right { background: linear-gradient(135deg, rgba(41,148,56,.88), rgba(41,148,56,.55)); }
-    .ov-left  { background: linear-gradient(135deg, rgba(219,64,53,.88), rgba(219,64,53,.55)); }
-    .ov-lbl {
-      font-size: 34px;
-      font-weight: 800;
-      color: #fff;
-      letter-spacing: 3px;
-      text-transform: uppercase;
-      border: 4px solid #fff;
-      padding: 7px 18px;
-      border-radius: 8px;
-    }
-    .ov-right .ov-lbl { transform: rotate(-15deg); }
-    .ov-left  .ov-lbl { transform: rotate(15deg); }
 
-    /* Task card content */
+    /* ── Task card content (shared) ─────────────── */
     .card-top {
       display: flex;
       align-items: flex-start;
@@ -305,10 +301,6 @@
       line-height: 1.4;
       margin-bottom: 14px;
       color: var(--text);
-      display: -webkit-box;
-      -webkit-line-clamp: 4;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
       text-decoration: none;
     }
     .task-title:hover { text-decoration: underline; color: var(--red); }
@@ -332,7 +324,7 @@
       color: var(--muted);
       line-height: 1.55;
       display: -webkit-box;
-      -webkit-line-clamp: 3;
+      -webkit-line-clamp: 4;
       -webkit-box-orient: vertical;
       overflow: hidden;
     }
@@ -357,47 +349,6 @@
       opacity: 0.85;
     }
 
-    /* Action buttons */
-    .actions {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-    .act-btn {
-      width: 62px; height: 62px;
-      border-radius: 50%;
-      border: none;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: var(--sh-md);
-      transition: transform .15s, box-shadow .15s;
-    }
-    .act-btn:hover  { transform: scale(1.08); box-shadow: var(--sh-lg); }
-    .act-btn:active { transform: scale(.95); }
-    .act-skip  { background: #fff; color: var(--red); border: 2px solid #eee; }
-    .act-save  { background: var(--green); color: #fff; width: 70px; height: 70px; }
-    .act-undo  { background: #fff; color: var(--muted); border: 2px solid #eee; width: 48px; height: 48px; align-self: flex-end; margin-bottom: -8px; }
-    .act-undo:hover { color: var(--text); }
-    .act-undo:disabled { opacity: 0.35; cursor: not-allowed; transform: none; box-shadow: var(--sh-md); }
-
-    .kbd-hint {
-      margin-top: 14px;
-      font-size: 12px;
-      color: var(--muted);
-      display: flex;
-      gap: 14px;
-    }
-    .kbd-hint span { display: flex; align-items: center; gap: 4px; }
-    kbd {
-      background: var(--border);
-      border-radius: 4px;
-      padding: 1px 6px;
-      font-size: 11px;
-      font-family: monospace;
-    }
-
     /* ── Empty View ──────────────────────────────── */
     .empty-wrap {
       display: flex;
@@ -412,65 +363,6 @@
     .empty-icon  { font-size: 52px; margin-bottom: 6px; }
     .empty-ttl   { font-size: 22px; font-weight: 700; }
     .empty-txt   { color: var(--muted); font-size: 15px; margin-bottom: 12px; }
-
-    /* ── Results View ────────────────────────────── */
-    .results-wrap {
-      max-width: 460px;
-      margin: 36px auto;
-      padding: 0 20px;
-      text-align: center;
-    }
-    .results-icon  { font-size: 56px; margin-bottom: 14px; }
-    .results-ttl   { font-size: 28px; font-weight: 800; margin-bottom: 6px; }
-    .results-sub   { color: var(--muted); margin-bottom: 28px; font-size: 15px; }
-    .results-card {
-      background: var(--surface);
-      border-radius: var(--r-lg);
-      padding: 28px;
-      box-shadow: var(--sh-md);
-      margin-bottom: 20px;
-    }
-    .stats {
-      display: flex;
-      justify-content: center;
-      gap: 36px;
-      margin-bottom: 24px;
-    }
-    .stat-n { font-size: 40px; font-weight: 800; color: var(--red); line-height: 1; }
-    .stat-l { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 3px; }
-    .label-row {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      font-size: 15px;
-      margin-bottom: 18px;
-    }
-    .label-pill {
-      background: #edf7ee;
-      border: 2px solid var(--green);
-      color: var(--green);
-      border-radius: 20px;
-      padding: 4px 14px;
-      font-size: 15px;
-      font-weight: 700;
-    }
-    a.todoist-link {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      background: var(--red);
-      color: #fff;
-      padding: 14px 24px;
-      border-radius: var(--r-sm);
-      text-decoration: none;
-      font-weight: 600;
-      font-size: 15px;
-      margin-bottom: 10px;
-      transition: background .15s;
-    }
-    a.todoist-link:hover { background: var(--red-dk); }
 
     /* ── Toast ───────────────────────────────────── */
     #toast {
@@ -559,9 +451,8 @@
     }
 
     @media (max-width: 480px) {
-      .card-stack  { height: 420px; }
-      .task-title  { font-size: 17px; }
-      .auth-card   { padding: 28px 22px; }
+      .auth-card { padding: 28px 22px; }
+      .task-title { font-size: 17px; }
     }
   </style>
 </head>
@@ -570,13 +461,13 @@
 <!-- ═══ HEADER ═══════════════════════════════════════════════════════════ -->
 <header class="hdr">
   <a href="#" class="hdr-logo" onclick="logoClick(); return false;">
-    <svg viewBox="0 0 24 24" fill="currentColor">
-      <path d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" opacity=".15"/>
-      <polyline points="6,9 10,13 18,7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-      <line x1="6" y1="14" x2="11" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      <line x1="6" y1="18" x2="14" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="9"/>
+      <path d="M12 3v2M12 19v2M3 12h2M19 12h2"/>
+      <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>
+      <path d="M12 9v3l2 2" stroke-width="2"/>
     </svg>
-    Todoist Triage
+    Todoist Roulette
   </a>
   <div id="hdr-right"></div>
 </header>
@@ -604,7 +495,7 @@
 <div id="view-filters" class="view">
   <div class="page-wrap">
     <div class="page-ttl">Your Filters</div>
-    <div class="page-sub">Pick a filter to start swiping through its tasks.</div>
+    <div class="page-sub">Pick a filter — the wheel will spin to choose a random task from it.</div>
     <div id="filter-list" class="filter-list"></div>
   </div>
 </div>
@@ -617,48 +508,43 @@
   </div>
 </div>
 
-<!-- ═══ TINDER ═══════════════════════════════════════════════════════════ -->
-<div id="view-tinder" class="view">
-  <div class="tinder-wrap">
-    <div class="tinder-hdr">
+<!-- ═══ WHEEL ════════════════════════════════════════════════════════════ -->
+<div id="view-wheel" class="view">
+  <div class="wheel-wrap">
+    <div class="wheel-hdr">
       <div class="filter-badge">
-        <div id="badge-dot" class="badge-dot"></div>
-        <span id="badge-name"></span>
+        <div id="wheel-badge-dot" class="badge-dot"></div>
+        <span id="wheel-badge-name"></span>
       </div>
-      <div style="display:flex;align-items:center;gap:10px;">
-        <span id="saved-counter" class="saved-counter">✓ 0 saved</span>
-        <span id="progress-txt" class="progress-txt">0 / 0</span>
-      </div>
+      <span id="wheel-task-count" class="wheel-task-count"></span>
     </div>
 
-    <div class="progress-rail">
-      <div id="progress-fill" class="progress-fill" style="width:0%"></div>
+    <div class="wheel-container">
+      <div class="wheel-pointer">▼</div>
+      <canvas id="wheel-canvas" width="360" height="360"></canvas>
     </div>
 
-    <div id="card-stack" class="card-stack"></div>
+    <div class="spin-btn-wrap">
+      <button id="spin-btn" class="btn btn-primary" onclick="spinBtnClick()">🎰 Spin!</button>
+      <span id="wheel-hint" class="wheel-hint">Lands on a random task</span>
+    </div>
+  </div>
+</div>
 
-    <div class="actions">
-      <button class="act-btn act-skip" onclick="doSwipe('left')" title="Skip (←)">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-      <button id="undo-btn" class="act-btn act-undo" onclick="undoSwipe()" title="Undo (U)" disabled>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
-        </svg>
-      </button>
-      <button class="act-btn act-save" onclick="doSwipe('right')" title="Save (→)">
-        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="20,6 9,17 4,12"/>
-        </svg>
-      </button>
+<!-- ═══ RESULT ═══════════════════════════════════════════════════════════ -->
+<div id="view-result" class="view">
+  <div class="result-wrap">
+    <div class="result-header">
+      <div class="result-icon">🎯</div>
+      <div class="result-ttl">The wheel has spoken!</div>
+      <div class="result-sub">Your randomly selected task:</div>
     </div>
 
-    <div class="kbd-hint">
-      <span><kbd>←</kbd> Skip</span>
-      <span><kbd>U</kbd> Undo</span>
-      <span><kbd>→</kbd> Save</span>
+    <div id="result-card" class="result-card"></div>
+
+    <div class="result-actions">
+      <button class="btn btn-primary btn-full" onclick="goBackToWheel()">🔄 Spin Again</button>
+      <button class="btn btn-secondary btn-full" onclick="showFilters()">← Change Filter</button>
     </div>
   </div>
 </div>
@@ -672,67 +558,6 @@
       The filter "<strong id="empty-filter-name"></strong>" returned no tasks right now.
     </div>
     <button class="btn btn-secondary" onclick="showFilters()">← Back to filters</button>
-  </div>
-</div>
-
-<!-- ═══ RESULTS ══════════════════════════════════════════════════════════ -->
-<div id="view-results" class="view">
-  <div class="results-wrap">
-    <div id="results-icon" class="results-icon">🎯</div>
-    <div id="results-ttl" class="results-ttl">All done!</div>
-    <div id="results-sub" class="results-sub">Here's what happened.</div>
-
-    <div class="results-card">
-      <div class="stats">
-        <div>
-          <div id="res-saved" class="stat-n">0</div>
-          <div class="stat-l">Saved</div>
-        </div>
-        <div>
-          <div id="res-skipped" class="stat-n" style="color:var(--muted)">0</div>
-          <div class="stat-l">Skipped</div>
-        </div>
-        <div>
-          <div id="res-total" class="stat-n" style="color:var(--muted)">0</div>
-          <div class="stat-l">Total</div>
-        </div>
-      </div>
-
-      <div id="label-section" style="display:none">
-        <div class="label-row">
-          <span>Label applied:</span>
-          <span id="label-pill" class="label-pill"></span>
-        </div>
-        <a id="todoist-link" class="todoist-link" href="#" target="_blank" rel="noopener">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-            <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
-          </svg>
-          Open in Todoist
-        </a>
-      </div>
-    </div>
-
-    <button class="btn btn-secondary btn-full" onclick="showFilters()">← Back to filters</button>
-  </div>
-</div>
-
-<!-- ═══ CONFIRM CLEAR MODAL ══════════════════════════════════════════════ -->
-<div id="confirm-overlay" class="err-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
-  <div class="err-modal" style="max-width:420px">
-    <div class="err-modal-hdr">
-      <span id="confirm-title" class="err-modal-title" style="color:var(--text)">Apply label</span>
-    </div>
-    <div style="padding:16px 20px; font-size:14px; line-height:1.6">
-      <div id="confirm-existing-count" style="color:var(--muted); margin-bottom:14px"></div>
-      <label id="confirm-clear-label" style="display:flex; align-items:center; gap:10px; cursor:pointer; color:var(--text)">
-        <input id="confirm-clear-checkbox" type="checkbox" style="width:16px;height:16px;cursor:pointer;flex-shrink:0">
-        Clear from existing tasks before applying?
-      </label>
-    </div>
-    <div class="err-modal-footer">
-      <button id="confirm-apply" class="btn btn-primary" style="flex:1">Apply</button>
-    </div>
   </div>
 </div>
 
@@ -762,8 +587,7 @@
 ════════════════════════════════════════════════════════════════════════ -->
 <script>
 /* ── Constants ─────────────────────────────────────────────────────── */
-const API          = 'https://api.todoist.com/api/v1';
-const SWIPE_THRESH = 80;
+const API = 'https://api.todoist.com/api/v1';
 
 const COLORS = {
   berry_red:'#b8255f', red:'#db4035', orange:'#ff9933', yellow:'#fad000',
@@ -774,33 +598,34 @@ const COLORS = {
   charcoal:'#808080', grey:'#b8b8b8', taupe:'#ccac93',
 };
 
+/* Wheel segment colors — distinct, visually appealing set */
+const SEGMENT_COLORS = [
+  '#e57373','#f06292','#ba68c8','#7986cb',
+  '#64b5f6','#4dd0e1','#4db6ac','#81c784',
+  '#aed581','#ffb74d','#ff8a65','#a1887f',
+  '#e57373','#9575cd','#4fc3f7','#dce775',
+];
+
 /* ── App state ─────────────────────────────────────────────────────── */
 const S = {
-  token:          localStorage.getItem('todoist_token') || '',
-  filters:        [],
-  tasks:          [],
-  projects:       {},
-  subtaskMap:     {},   // task_id -> incomplete subtask count
-  parentMap:      {},   // task_id -> parent task object
-  selFilter:      null,
-  idx:            0,
-  saved:          [],
-  history:        [],   // array of 'left'|'right' for undo
-  // Pre-fetch caches (Promises); cleared when returning to filters view
-  taskCache:      {},   // filter_id -> Promise<task[]>
-  syncCache:      null, // Promise<sync data — items + projects>
+  token:      localStorage.getItem('todoist_token') || '',
+  filters:    [],
+  tasks:      [],
+  projects:   {},
+  subtaskMap: {},
+  parentMap:  {},
+  selFilter:  null,
+  winner:     null,
+  wheelAngle: 0,
+  spinning:   false,
+  syncCache:  null,
+  taskCache:  {},
 };
 
-/* Drag state */
-const drag = { on: false, sx: 0, dx: 0, swiping: false };
+let animFrame    = null;
+let spinVelocity = 0; // current angular velocity in rad/ms
 
 /* ── API helpers ───────────────────────────────────────────────────── */
-async function get(path) {
-  const r = await fetch(API + path, { headers:{ Authorization:`Bearer ${S.token}` } });
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-  return r.json();
-}
-
 async function getAll(path) {
   const items = [];
   const sep = path.includes('?') ? '&' : '?';
@@ -819,24 +644,13 @@ async function getAll(path) {
       e.fetchUrl = url;
       e.httpStatus = r.status;
       e.responseBody = body;
-      throw e;
+throw e;
     }
     const data = await r.json();
     items.push(...data.results);
     url = data.next_cursor ? `${API}${path}${sep}cursor=${encodeURIComponent(data.next_cursor)}` : null;
   }
   return items;
-}
-
-async function post(path, body) {
-  const r = await fetch(API + path, {
-    method:  'POST',
-    headers: { Authorization:`Bearer ${S.token}`, 'Content-Type':'application/json' },
-    body:    JSON.stringify(body),
-  });
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-  if (r.status === 204) return null;
-  return r.json();
 }
 
 async function syncResources(resourceTypes) {
@@ -866,15 +680,12 @@ function updateHeader(viewId) {
     el.innerHTML = '';
   } else if (viewId === 'view-filters') {
     el.innerHTML = `<button class="btn btn-secondary btn-sm" onclick="logout()">Log out</button>`;
-  } else if (viewId === 'view-tinder') {
-    el.innerHTML = `<button class="btn btn-secondary btn-sm" onclick="showFilters()">← Filters</button>`;
   } else {
     el.innerHTML = `<button class="btn btn-secondary btn-sm" onclick="showFilters()">← Filters</button>`;
   }
 }
 
 function logoClick() {
-  // Navigate to filters if logged in, otherwise do nothing
   if (S.token) showFilters();
 }
 
@@ -933,9 +744,6 @@ async function loadFilters() {
 }
 
 function showFilters() {
-  // Clear pre-fetch caches so returning after a triage session gets fresh data
-  S.taskCache  = {};
-  S.syncCache  = null;
   renderFilters();
   showView('view-filters');
 }
@@ -948,7 +756,7 @@ function renderFilters() {
     return;
   }
   list.innerHTML = S.filters.map(f => `
-    <div class="filter-item" onclick="selectFilter('${esc(f.id)}')">
+    <div class="filter-item" data-filter-id="${esc(f.id)}" onclick="selectFilter('${esc(f.id)}')">
       <div class="filter-dot" style="background:${COLORS[f.color] || '#db4035'}"></div>
       <span class="filter-name">${esc(f.name)}</span>
       <span class="filter-count" id="count-${esc(f.id)}">…</span>
@@ -962,77 +770,72 @@ function renderFilters() {
 }
 
 function loadFilterCounts() {
-  // Pre-warm shared caches used by selectFilter
-  if (!S.syncCache) S.syncCache = syncResources(['items']);
+  let delay = 0;
 
-  // Stagger requests 100ms apart to avoid bursting the Todoist API
-  S.filters.forEach((f, i) => {
-    setTimeout(() => {
-      if (!S.taskCache[f.id]) {
-        S.taskCache[f.id] = getAll(`/tasks/filter?query=${encodeURIComponent(f.query)}`);
-      }
-      S.taskCache[f.id]
-        .then(tasks => {
-          const el = document.getElementById(`count-${f.id}`);
-          if (!el) return;
-          el.textContent = String(tasks.length);
-          el.classList.add('loaded');
-        })
-        .catch(() => {
-          delete S.taskCache[f.id]; // clear so selectFilter can retry fresh
-          const el = document.getElementById(`count-${f.id}`);
-          if (el) el.textContent = '?';
-        });
-    }, i * 100);
+  async function fetchCount(f) {
+    const el = document.getElementById(`count-${f.id}`);
+    if (!el) return;
+    try {
+      const tasks = await getAll(`/tasks/filter?query=${encodeURIComponent(f.query)}`);
+      S.taskCache[f.id] = tasks;
+      el.textContent = String(tasks.length);
+      el.classList.add('loaded');
+    } catch {
+      el.textContent = '?';
+    }
+  }
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      observer.unobserve(entry.target);
+      const id = entry.target.dataset.filterId;
+      const f = S.filters.find(x => x.id === id);
+      if (!f) return;
+      setTimeout(() => fetchCount(f), delay);
+      delay += 100;
+    });
   });
+
+  document.querySelectorAll('.filter-item[data-filter-id]').forEach(el => observer.observe(el));
 }
 
 async function selectFilter(id) {
   const f = S.filters.find(x => x.id === id);
   if (!f) return;
 
-  S.selFilter = f;
-  S.idx     = 0;
-  S.saved   = [];
-  S.history = [];
+  S.selFilter  = f;
+  S.winner     = null;
+  S.wheelAngle = 0;
+  S.spinning   = false;
 
-  const tasksCached  = !!S.taskCache[f.id];
-  const tasksPromise = S.taskCache[f.id] || getAll(`/tasks/filter?query=${encodeURIComponent(f.query)}`);
   if (!S.syncCache) S.syncCache = syncResources(['items']);
 
-  if (!tasksCached) loading('Loading tasks…');
+  const cached = S.taskCache[f.id];
+  if (!cached) loading('Loading tasks…');
 
   try {
-    const tasks = await tasksPromise;
+    const tasks = cached || await getAll(`/tasks/filter?query=${encodeURIComponent(f.query)}`);
     S.tasks      = tasks;
     S.subtaskMap = {};
     S.parentMap  = {};
 
-    // Use sync data immediately if already resolved; otherwise render now
-    // and patch cards in when it arrives (avoids blocking on slow items fetch)
     let syncData = null;
     S.syncCache.then(d => { syncData = d; }).catch(() => {});
-    await Promise.resolve(); // flush microtask queue so above fires if resolved
-
+    await Promise.resolve();
     if (syncData) buildSyncMaps(tasks, syncData);
 
     if (!S.tasks.length) {
       document.getElementById('empty-filter-name').textContent = f.name;
       showView('view-empty');
     } else {
-      startTinder();
+      startWheel();
     }
 
-    // If sync wasn't ready yet, re-render cards once it arrives
     if (!syncData) {
       S.syncCache
-        .then(data => {
-          buildSyncMaps(tasks, data);
-          if (S.tasks.length && document.getElementById('view-tinder').classList.contains('active')) {
-            renderCards();
-          }
-        })
-        .catch(() => {}); // subtask info just won't show on error
+        .then(data => { buildSyncMaps(tasks, data); })
+        .catch(() => {});
     }
   } catch (e) {
     showError(e, 'Failed to load tasks');
@@ -1056,83 +859,244 @@ function buildSyncMaps(tasks, syncData) {
   });
 }
 
-/* ── Tinder ────────────────────────────────────────────────────────── */
-function startTinder() {
-  updateTinderHeader();
-  updateProgress();
-  renderCards();
-  showView('view-tinder');
-}
-
-function updateTinderHeader() {
+/* ── Wheel ─────────────────────────────────────────────────────────── */
+function startWheel() {
   const f = S.selFilter;
-  document.getElementById('badge-name').textContent = f.name;
-  document.getElementById('badge-dot').style.background = COLORS[f.color] || '#db4035';
+  document.getElementById('wheel-badge-name').textContent = f.name;
+  document.getElementById('wheel-badge-dot').style.background = COLORS[f.color] || '#db4035';
+  document.getElementById('wheel-task-count').textContent = `${S.tasks.length} task${S.tasks.length !== 1 ? 's' : ''}`;
+
+  const canvas = document.getElementById('wheel-canvas');
+  const size = Math.min(360, window.innerWidth - 48);
+  canvas.width  = size;
+  canvas.height = size;
+
+  document.getElementById('spin-btn').disabled = false;
+  showView('view-wheel');
+  drawWheel(S.wheelAngle);
 }
 
-function updateProgress() {
-  const total = S.tasks.length;
-  const pct   = total ? (S.idx / total) * 100 : 0;
-  document.getElementById('progress-fill').style.width = pct + '%';
-  document.getElementById('progress-txt').textContent  = `${S.idx} / ${total}`;
-  const sc = document.getElementById('saved-counter');
-  sc.textContent = `✓ ${S.saved.length} saved`;
-  sc.classList.toggle('visible', S.saved.length > 0);
+function drawWheel(angle) {
+  const canvas = document.getElementById('wheel-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width;
+  const H = canvas.height;
+  const cx = W / 2;
+  const cy = H / 2;
+  const r  = Math.min(cx, cy) - 6;
 
-  // Update undo button state
-  const undoBtn = document.getElementById('undo-btn');
-  if (undoBtn) undoBtn.disabled = S.history.length === 0;
-}
+  const tasks = S.tasks;
+  const n = tasks.length;
+  const sliceAngle = (2 * Math.PI) / n;
 
-function renderCards() {
-  const stack = document.getElementById('card-stack');
-  stack.innerHTML = '';
+  ctx.clearRect(0, 0, W, H);
 
-  if (S.idx >= S.tasks.length) {
-    // All cards processed — go to finish flow
-    finishSwiping();
-    return;
+  /* Draw segments */
+  for (let i = 0; i < n; i++) {
+    const startA = angle + i * sliceAngle - Math.PI / 2;
+    const endA   = startA + sliceAngle;
+
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, startA, endA);
+    ctx.closePath();
+    ctx.fillStyle = SEGMENT_COLORS[i % SEGMENT_COLORS.length];
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = n > 30 ? 1 : 2;
+    ctx.stroke();
   }
 
-  // Behind card (next)
-  if (S.idx + 1 < S.tasks.length) {
-    stack.appendChild(buildCard(S.tasks[S.idx + 1], 'behind'));
-  }
+  /* Draw labels */
+  ctx.save();
+  for (let i = 0; i < n; i++) {
+    const midA = angle + (i + 0.5) * sliceAngle - Math.PI / 2;
+    const textR = r * 0.62;
+    const tx = cx + textR * Math.cos(midA);
+    const ty = cy + textR * Math.sin(midA);
 
-  // Front card
-  const front = buildCard(S.tasks[S.idx], 'front');
-  front.id = 'front-card';
-  attachDrag(front);
-  stack.appendChild(front);
+    ctx.save();
+    ctx.translate(tx, ty);
+    ctx.rotate(midA + Math.PI / 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+
+    /* Font size shrinks with more tasks */
+    const fontSize = n <= 8 ? 13 : n <= 16 ? 11 : 9;
+    ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    /* Max chars based on segment arc length */
+    const arcLen = sliceAngle * textR;
+    const charWidth = fontSize * 0.6;
+    const maxChars = Math.max(3, Math.floor(arcLen / charWidth));
+    const label = tasks[i].content.length > maxChars
+      ? tasks[i].content.slice(0, maxChars - 1) + '…'
+      : tasks[i].content;
+
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
+  }
+  ctx.restore();
+
+  /* Center circle */
+  ctx.beginPath();
+  ctx.arc(cx, cy, 14, 0, 2 * Math.PI);
+  ctx.fillStyle = '#fff';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
 }
 
-function buildCard(task, layer) {
-  const proj       = S.projects[task.project_id];
-  const pInfo      = priorityInfo(task.priority);
-  const due        = task.due ? fmtDue(task.due) : null;
-  const deadline   = task.deadline ? fmtDeadline(task.deadline) : null;
-  const subtasks   = S.subtaskMap[task.id] || 0;
-  const parent     = S.parentMap[task.id] || null;
-  const duration   = task.duration ? fmtDuration(task.duration) : null;
-  const taskUrl    = `https://app.todoist.com/app/task/${task.id}`;
+function spinBtnClick() {
+  if (S.spinning) stopWheelEarly();
+  else spinWheel();
+}
 
-  const div = document.createElement('div');
-  div.className = `task-card ${layer}`;
+function spinWheel() {
+  if (S.spinning) return;
+  S.spinning = true;
+  const btn = document.getElementById('spin-btn');
+  btn.textContent = '⏹ Stop';
+  document.getElementById('wheel-hint').textContent = 'Click to stop early';
+  document.getElementById('wheel-canvas').style.cursor = 'pointer';
 
-  div.innerHTML = `
-    <div class="ov ov-right" id="${layer === 'front' ? 'ov-r' : ''}">
-      <div class="ov-lbl">SAVE</div>
-    </div>
-    <div class="ov ov-left" id="${layer === 'front' ? 'ov-l' : ''}">
-      <div class="ov-lbl">SKIP</div>
-    </div>
+  const n = S.tasks.length;
+  const winnerIdx = Math.floor(Math.random() * n);
+  const sliceAngle = (2 * Math.PI) / n;
 
+  /*
+   * We want the midpoint of winnerIdx's segment at the top (pointer).
+   * Midpoint angle = angle + (winnerIdx + 0.5) * sliceAngle - π/2
+   * For this to equal -π/2 (top): angle = -(winnerIdx + 0.5) * sliceAngle + 2πk
+   */
+  let targetAngle = -(winnerIdx + 0.5) * sliceAngle;
+
+  /* Ensure we spin at least 7 full rotations forward from current angle */
+  while (targetAngle < S.wheelAngle + 7 * 2 * Math.PI) {
+    targetAngle += 2 * Math.PI;
+  }
+
+  const startAngle = S.wheelAngle;
+  const totalDelta = targetAngle - startAngle;
+  const duration   = 3000;
+  const startTime  = performance.now();
+
+  function easeOut(t) {
+    /* Quartic ease-out: starts fast, decelerates smoothly */
+    return 1 - Math.pow(1 - t, 4);
+  }
+
+  function frame(now) {
+    const elapsed = now - startTime;
+    const t       = Math.min(1, elapsed / duration);
+
+    /* Track instantaneous velocity (derivative of quartic ease-out) */
+    spinVelocity = 4 * Math.pow(1 - t, 3) * totalDelta / duration;
+
+    S.wheelAngle = startAngle + easeOut(t) * totalDelta;
+    drawWheel(S.wheelAngle);
+
+    if (t < 1) {
+      animFrame = requestAnimationFrame(frame);
+    } else {
+      finishSpin(winnerIdx);
+    }
+  }
+
+  animFrame = requestAnimationFrame(frame);
+}
+
+function stopWheelEarly() {
+  if (!S.spinning || spinVelocity < 0.0005) return;
+  cancelAnimationFrame(animFrame);
+  animFrame = null;
+  const vel = spinVelocity;
+  spinVelocity = 0;
+  document.getElementById('spin-btn').disabled = true;
+  document.getElementById('wheel-canvas').style.cursor = '';
+
+  const n = S.tasks.length;
+  const sliceAngle = (2 * Math.PI) / n;
+
+  /* Coast distance: clamp between half a segment and four full rotations */
+  const coastDist = Math.max(sliceAngle * 0.5, Math.min(8 * Math.PI, vel * 1200));
+  const rawTarget = S.wheelAngle + coastDist;
+
+  /* Find the segment whose midpoint is closest to rawTarget */
+  const rawIdx   = -rawTarget / sliceAngle - 0.5;
+  const winnerIdx = ((Math.round(rawIdx) % n) + n) % n;
+
+  /* Snap target to that segment midpoint, ensuring forward motion */
+  let newTarget = -(winnerIdx + 0.5) * sliceAngle;
+  while (newTarget < S.wheelAngle + sliceAngle * 0.1) newTarget += 2 * Math.PI;
+
+  const startAngle   = S.wheelAngle;
+  const dist         = newTarget - startAngle;
+  const coastDuration = Math.max(400, Math.min(1800, dist / vel * 1.5));
+  const startTime    = performance.now();
+
+  function coastFrame(now) {
+    const elapsed = now - startTime;
+    const t       = Math.min(1, elapsed / coastDuration);
+    const easedT  = 1 - Math.pow(1 - t, 3); /* cubic ease-out */
+
+    S.wheelAngle = startAngle + easedT * dist;
+    drawWheel(S.wheelAngle);
+
+    if (t < 1) {
+      animFrame = requestAnimationFrame(coastFrame);
+    } else {
+      finishSpin(winnerIdx);
+    }
+  }
+
+  animFrame = requestAnimationFrame(coastFrame);
+}
+
+function finishSpin(winnerIdx) {
+  S.wheelAngle = S.wheelAngle % (2 * Math.PI);
+  S.spinning   = false;
+  S.winner     = S.tasks[winnerIdx];
+  const btn = document.getElementById('spin-btn');
+  btn.textContent = '🎰 Spin!';
+  btn.disabled = false;
+  document.getElementById('wheel-hint').textContent = 'Lands on a random task';
+  document.getElementById('wheel-canvas').style.cursor = '';
+  setTimeout(() => showResult(), 500);
+}
+
+function goBackToWheel() {
+  document.getElementById('spin-btn').disabled = false;
+  showView('view-wheel');
+  drawWheel(S.wheelAngle);
+}
+
+function showResult() {
+  const task = S.winner;
+  document.getElementById('result-card').innerHTML = buildTaskHTML(task);
+  showView('view-result');
+}
+
+/* ── Task card HTML builder ────────────────────────────────────────── */
+function buildTaskHTML(task) {
+  const proj     = S.projects[task.project_id];
+  const pInfo    = priorityInfo(task.priority);
+  const due      = task.due ? fmtDue(task.due) : null;
+  const deadline = task.deadline ? fmtDeadline(task.deadline) : null;
+  const subtasks = S.subtaskMap[task.id] || 0;
+  const parent   = S.parentMap[task.id] || null;
+  const duration = task.duration ? fmtDuration(task.duration) : null;
+  const taskUrl  = `https://app.todoist.com/app/task/${task.id}`;
+
+  return `
     <div class="card-top">
       <span class="priority-badge ${pInfo.cls}">${pInfo.label}</span>
     </div>
 
-    <a class="task-title" href="${taskUrl}" target="_blank" rel="noopener"
-       onclick="event.stopPropagation()">${esc(task.content)}</a>
+    <a class="task-title" href="${taskUrl}" target="_blank" rel="noopener">${esc(task.content)}</a>
 
     <div class="task-meta">
       ${parent ? `
@@ -1181,242 +1145,6 @@ function buildCard(task, layer) {
       ? `<div class="task-chips">${task.labels.map(l => `<span class="chip">@${esc(l)}</span>`).join('')}</div>`
       : ''}
   `;
-
-  return div;
-}
-
-/* ── Drag / swipe ──────────────────────────────────────────────────── */
-function attachDrag(card) {
-  card.addEventListener('mousedown',  onDragStart);
-  card.addEventListener('touchstart', onDragStart, { passive: true });
-}
-
-function onDragStart(e) {
-  // Don't start drag if clicking on the task title link
-  if (e.target.closest('a.task-title')) return;
-
-  const { clientX } = e.touches ? e.touches[0] : e;
-  drag.on = true;
-  drag.sx = clientX;
-  drag.dx = 0;
-  const c = document.getElementById('front-card');
-  if (c) c.style.transition = 'none';
-
-  document.addEventListener('mousemove',  onDragMove);
-  document.addEventListener('touchmove',  onDragMove, { passive: false });
-  document.addEventListener('mouseup',    onDragEnd);
-  document.addEventListener('touchend',   onDragEnd);
-}
-
-function onDragMove(e) {
-  if (!drag.on) return;
-  const { clientX } = e.touches ? e.touches[0] : e;
-  drag.dx = clientX - drag.sx;
-
-  // Only prevent default scroll when horizontal drag is significant
-  if (e.cancelable && Math.abs(drag.dx) > 8) e.preventDefault();
-
-  const c = document.getElementById('front-card');
-  if (!c) return;
-
-  c.style.transform = `translateX(${drag.dx}px) rotate(${drag.dx * 0.055}deg)`;
-
-  const ovR = document.getElementById('ov-r');
-  const ovL = document.getElementById('ov-l');
-  if (ovR) ovR.style.opacity = Math.min(1, Math.max(0,  drag.dx / 80));
-  if (ovL) ovL.style.opacity = Math.min(1, Math.max(0, -drag.dx / 80));
-}
-
-function onDragEnd() {
-  if (!drag.on) return;
-  drag.on = false;
-
-  document.removeEventListener('mousemove',  onDragMove);
-  document.removeEventListener('touchmove',  onDragMove);
-  document.removeEventListener('mouseup',    onDragEnd);
-  document.removeEventListener('touchend',   onDragEnd);
-
-  const c = document.getElementById('front-card');
-  if (!c) return;
-
-  if (drag.dx >  SWIPE_THRESH) {
-    doSwipe('right');
-  } else if (drag.dx < -SWIPE_THRESH) {
-    doSwipe('left');
-  } else {
-    // Snap back
-    c.style.transition = 'transform .35s cubic-bezier(.175,.885,.32,1.275)';
-    c.style.transform  = 'none';
-    const ovR = document.getElementById('ov-r');
-    const ovL = document.getElementById('ov-l');
-    if (ovR) ovR.style.opacity = '0';
-    if (ovL) ovL.style.opacity = '0';
-  }
-}
-
-function doSwipe(dir) {
-  if (drag.swiping) return;
-  const c = document.getElementById('front-card');
-  if (!c) return;
-  drag.swiping = true;
-
-  if (dir === 'right') {
-    S.saved.push(S.tasks[S.idx]);
-    const ovR = document.getElementById('ov-r');
-    if (ovR) { ovR.style.transition = 'opacity .1s'; ovR.style.opacity = '1'; }
-    c.style.transition = 'transform .45s ease, opacity .4s ease';
-    c.style.transform  = 'translateX(160%) rotate(28deg)';
-    c.style.opacity    = '0';
-  } else {
-    const ovL = document.getElementById('ov-l');
-    if (ovL) { ovL.style.transition = 'opacity .1s'; ovL.style.opacity = '1'; }
-    c.style.transition = 'transform .45s ease, opacity .4s ease';
-    c.style.transform  = 'translateX(-160%) rotate(-28deg)';
-    c.style.opacity    = '0';
-  }
-
-  S.history.push(dir);
-
-  setTimeout(() => {
-    S.idx++;
-    drag.swiping = false;
-    updateProgress();
-    renderCards();
-  }, 380);
-}
-
-function undoSwipe() {
-  if (S.history.length === 0 || drag.swiping) return;
-
-  const last = S.history.pop();
-  if (last === 'right') {
-    S.saved.pop();
-  }
-  S.idx--;
-  updateProgress();
-  renderCards();
-}
-
-/* Keyboard */
-document.addEventListener('keydown', e => {
-  const tv = document.getElementById('view-tinder');
-  if (!tv.classList.contains('active')) return;
-  if (e.key === 'ArrowRight') doSwipe('right');
-  if (e.key === 'ArrowLeft')  doSwipe('left');
-  if (e.key === 'u' || e.key === 'U') undoSwipe();
-});
-
-/* ── Finish / label creation ───────────────────────────────────────── */
-const LABEL_NAME = 'triaged-tasks';
-
-function confirmClearLabel(existingCount) {
-  return new Promise(resolve => {
-    const overlay    = document.getElementById('confirm-overlay');
-    const countEl    = document.getElementById('confirm-existing-count');
-    const checkbox   = document.getElementById('confirm-clear-checkbox');
-    const clearLabel = document.getElementById('confirm-clear-label');
-
-    countEl.textContent = existingCount === 0
-      ? 'No tasks currently have this label.'
-      : `${existingCount} task${existingCount !== 1 ? 's' : ''} currently ${existingCount !== 1 ? 'have' : 'has'} this label.`;
-
-    checkbox.checked  = false;
-    checkbox.disabled = existingCount === 0;
-    clearLabel.style.opacity = existingCount === 0 ? '0.4' : '1';
-    clearLabel.style.cursor  = existingCount === 0 ? 'default' : 'pointer';
-
-    overlay.style.display = 'flex';
-    document.getElementById('confirm-apply').focus();
-    document.getElementById('confirm-apply').onclick = () => {
-      const shouldClear = checkbox.checked;
-      overlay.style.display = 'none';
-      resolve(shouldClear);
-    };
-  });
-}
-
-async function finishSwiping() {
-  if (!S.saved.length) {
-    showResultsView(null);
-    return;
-  }
-
-  loading('Checking existing label…');
-
-  let labelExists          = false;
-  let existingLabelledTasks = [];
-  try {
-    const allLabels = await getAll('/labels');
-    labelExists = !!allLabels.find(l => l.name === LABEL_NAME);
-    if (labelExists) {
-      existingLabelledTasks = await getAll(`/tasks?label=${encodeURIComponent(LABEL_NAME)}`);
-    }
-  } catch (e) {
-    showError(e, 'Error applying label');
-    showFilters();
-    return;
-  }
-
-  const shouldClear = await confirmClearLabel(existingLabelledTasks.length);
-
-  try {
-    if (!labelExists) {
-      await post('/labels', { name: LABEL_NAME, color: 'lime_green' });
-    }
-
-    if (shouldClear && existingLabelledTasks.length) {
-      const n = existingLabelledTasks.length;
-      loading(`Clearing label from ${n} task${n !== 1 ? 's' : ''}…`);
-      await Promise.all(
-        existingLabelledTasks.map(t =>
-          post(`/tasks/${t.id}`, { labels: (t.labels || []).filter(l => l !== LABEL_NAME) })
-        )
-      );
-    }
-
-    const m = S.saved.length;
-    loading(`Applying label to ${m} task${m !== 1 ? 's' : ''}…`);
-    await Promise.all(
-      S.saved.map(t =>
-        post(`/tasks/${t.id}`, { labels: [...new Set([...(t.labels || []), LABEL_NAME])] })
-      )
-    );
-
-    showResultsView(LABEL_NAME);
-  } catch (e) {
-    showError(e, 'Error applying label');
-    showFilters();
-  }
-}
-
-function showResultsView(labelName) {
-  const saved   = S.saved.length;
-  const total   = S.tasks.length;
-  const skipped = total - saved;
-
-  document.getElementById('res-saved').textContent   = saved;
-  document.getElementById('res-skipped').textContent = skipped;
-  document.getElementById('res-total').textContent   = total;
-
-  const lblSec = document.getElementById('label-section');
-  if (labelName) {
-    document.getElementById('label-pill').textContent = `@${labelName}`;
-    document.getElementById('todoist-link').href =
-      `https://app.todoist.com/app/label/${encodeURIComponent(labelName)}`;
-    lblSec.style.display = 'block';
-
-    document.getElementById('results-ttl').textContent = 'Done! 🎉';
-    document.getElementById('results-sub').textContent =
-      `${saved} task${saved !== 1 ? 's' : ''} labelled and ready to go.`;
-    document.getElementById('results-icon').textContent = '🎯';
-  } else {
-    lblSec.style.display = 'none';
-    document.getElementById('results-ttl').textContent = 'All done!';
-    document.getElementById('results-sub').textContent = 'No tasks were saved this time.';
-    document.getElementById('results-icon').textContent = '👀';
-  }
-
-  showView('view-results');
 }
 
 /* ── Helpers ───────────────────────────────────────────────────────── */
@@ -1430,7 +1158,6 @@ function esc(s) {
 }
 
 function priorityInfo(p) {
-  // API: 4=P1, 3=P2, 2=P3, 1=P4
   const m = {
     4: { cls:'p1', label:'P1' },
     3: { cls:'p2', label:'P2' },
@@ -1441,17 +1168,12 @@ function priorityInfo(p) {
 }
 
 function fmtDue(due) {
-  // Parse datetime correctly:
-  // due.datetime is UTC with Z e.g. "2026-03-04T09:00:00Z"
-  // due.date may be "YYYY-MM-DD" or "YYYY-MM-DDTHH:MM:SS" (local time, no Z)
   let d;
   if (due.datetime) {
-    d = new Date(due.datetime); // UTC string with Z
+    d = new Date(due.datetime);
   } else if (due.date && due.date.includes('T')) {
-    // Date with time but no timezone — treat as local
     d = new Date(due.date);
   } else {
-    // Date only — treat as local midnight
     d = new Date(due.date + 'T00:00:00');
   }
 
@@ -1481,7 +1203,6 @@ function fmtDue(due) {
 }
 
 function fmtDeadline(deadline) {
-  // deadline: { date: "YYYY-MM-DD", lang: "en" }
   if (!deadline || !deadline.date) return null;
   const d    = new Date(deadline.date + 'T00:00:00');
   if (isNaN(d.getTime())) return null;
@@ -1521,9 +1242,7 @@ function toast(msg, type = '') {
   el.textContent = msg;
   el.className   = 'show ' + type;
   clearTimeout(toastTimer);
-  if (type === 'err') {
-    // Errors stay until tapped
-  } else {
+  if (type !== 'err') {
     toastTimer = setTimeout(() => { el.className = ''; }, 3500);
   }
 }
@@ -1555,7 +1274,6 @@ async function copyError() {
   try {
     await navigator.clipboard.writeText(text);
   } catch {
-    // Fallback for browsers without clipboard API
     const ta = document.createElement('textarea');
     ta.value = text;
     ta.style.position = 'fixed';
