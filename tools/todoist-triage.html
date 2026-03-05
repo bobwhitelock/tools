@@ -965,23 +965,25 @@ function loadFilterCounts() {
   // Pre-warm shared caches used by selectFilter
   if (!S.syncCache) S.syncCache = syncResources(['items']);
 
-  // Kick off a full task fetch for each filter (same request selectFilter will use)
-  S.filters.forEach(f => {
-    if (!S.taskCache[f.id]) {
-      S.taskCache[f.id] = getAll(`/tasks/filter?query=${encodeURIComponent(f.query)}`);
-    }
-    S.taskCache[f.id]
-      .then(tasks => {
-        const el = document.getElementById(`count-${f.id}`);
-        if (!el) return;
-        el.textContent = String(tasks.length);
-        el.classList.add('loaded');
-      })
-      .catch(() => {
-        delete S.taskCache[f.id]; // clear so selectFilter can retry fresh
-        const el = document.getElementById(`count-${f.id}`);
-        if (el) el.textContent = '?';
-      });
+  // Stagger requests 100ms apart to avoid bursting the Todoist API
+  S.filters.forEach((f, i) => {
+    setTimeout(() => {
+      if (!S.taskCache[f.id]) {
+        S.taskCache[f.id] = getAll(`/tasks/filter?query=${encodeURIComponent(f.query)}`);
+      }
+      S.taskCache[f.id]
+        .then(tasks => {
+          const el = document.getElementById(`count-${f.id}`);
+          if (!el) return;
+          el.textContent = String(tasks.length);
+          el.classList.add('loaded');
+        })
+        .catch(() => {
+          delete S.taskCache[f.id]; // clear so selectFilter can retry fresh
+          const el = document.getElementById(`count-${f.id}`);
+          if (el) el.textContent = '?';
+        });
+    }, i * 100);
   });
 }
 
