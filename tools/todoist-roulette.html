@@ -1010,6 +1010,9 @@ function stopWheelEarly() {
   if (!S.spinning || spinVelocity < 0.0005) return;
   cancelAnimationFrame(animFrame);
   animFrame = null;
+  spinVelocity = 0;
+  document.getElementById('spin-btn').disabled = true;
+  document.getElementById('wheel-canvas').style.cursor = '';
 
   const n = S.tasks.length;
   const sliceAngle = (2 * Math.PI) / n;
@@ -1055,6 +1058,7 @@ function finishSpin(winnerIdx) {
   S.winner     = S.tasks[winnerIdx];
   const btn = document.getElementById('spin-btn');
   btn.textContent = '🎰 Spin!';
+  btn.disabled = false;
   document.getElementById('wheel-hint').textContent = 'Lands on a random task';
   document.getElementById('wheel-canvas').style.cursor = '';
   setTimeout(() => showResult(), 500);
