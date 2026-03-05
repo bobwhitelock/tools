@@ -615,7 +615,6 @@ const S = {
   winner:     null,
   wheelAngle: 0,
   spinning:   false,
-  taskCache:  {},
   syncCache:  null,
 };
 
@@ -741,8 +740,6 @@ async function loadFilters() {
 }
 
 function showFilters() {
-  S.taskCache = {};
-  S.syncCache = null;
   renderFilters();
   showView('view-filters');
 }
@@ -755,7 +752,7 @@ function renderFilters() {
     return;
   }
   list.innerHTML = S.filters.map(f => `
-    <div class="filter-item" onclick="selectFilter('${esc(f.id)}')">
+    <div class="filter-item" data-filter-id="${esc(f.id)}" onclick="selectFilter('${esc(f.id)}')">
       <div class="filter-dot" style="background:${COLORS[f.color] || '#db4035'}"></div>
       <span class="filter-name">${esc(f.name)}</span>
       <span class="filter-count" id="count-${esc(f.id)}">…</span>
@@ -769,24 +766,37 @@ function renderFilters() {
 }
 
 function loadFilterCounts() {
-  if (!S.syncCache) S.syncCache = syncResources(['items']);
-  S.filters.forEach(f => {
-    if (!S.taskCache[f.id]) {
-      S.taskCache[f.id] = getAll(`/tasks/filter?query=${encodeURIComponent(f.query)}`);
+  const queue = [];
+  let processing = false;
+
+  async function processNext() {
+    if (!queue.length) { processing = false; return; }
+    const f = queue.shift();
+    const el = document.getElementById(`count-${f.id}`);
+    if (!el) { processNext(); return; }
+    try {
+      const tasks = await getAll(`/tasks/filter?query=${encodeURIComponent(f.query)}`);
+      el.textContent = String(tasks.length);
+      el.classList.add('loaded');
+    } catch {
+      el.textContent = '?';
     }
-    S.taskCache[f.id]
-      .then(tasks => {
-        const el = document.getElementById(`count-${f.id}`);
-        if (!el) return;
-        el.textContent = String(tasks.length);
-        el.classList.add('loaded');
-      })
-      .catch(() => {
-        delete S.taskCache[f.id];
-        const el = document.getElementById(`count-${f.id}`);
-        if (el) el.textContent = '?';
-      });
+    setTimeout(processNext, 150);
+  }
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      observer.unobserve(entry.target);
+      const id = entry.target.dataset.filterId;
+      const f = S.filters.find(x => x.id === id);
+      if (!f) return;
+      queue.push(f);
+      if (!processing) { processing = true; processNext(); }
+    });
   });
+
+  document.querySelectorAll('.filter-item[data-filter-id]').forEach(el => observer.observe(el));
 }
 
 async function selectFilter(id) {
@@ -798,14 +808,11 @@ async function selectFilter(id) {
   S.wheelAngle = 0;
   S.spinning   = false;
 
-  const tasksCached  = !!S.taskCache[f.id];
-  const tasksPromise = S.taskCache[f.id] || getAll(`/tasks/filter?query=${encodeURIComponent(f.query)}`);
   if (!S.syncCache) S.syncCache = syncResources(['items']);
-
-  if (!tasksCached) loading('Loading tasks…');
+  loading('Loading tasks…');
 
   try {
-    const tasks = await tasksPromise;
+    const tasks = await getAll(`/tasks/filter?query=${encodeURIComponent(f.query)}`);
     S.tasks      = tasks;
     S.subtaskMap = {};
     S.parentMap  = {};
