@@ -523,7 +523,7 @@
 
     <div class="spin-btn-wrap">
       <button id="spin-btn" class="btn btn-primary" onclick="spinWheel()">🎰 Spin!</button>
-      <span class="wheel-hint">Lands on a random task</span>
+      <span id="wheel-hint" class="wheel-hint">Lands on a random task</span>
     </div>
   </div>
 </div>
@@ -618,6 +618,9 @@ const S = {
   taskCache:  {},
   syncCache:  null,
 };
+
+let animFrame    = null;
+let spinVelocity = 0; // current angular velocity in rad/ms
 
 /* ── API helpers ───────────────────────────────────────────────────── */
 async function getAll(path) {
@@ -941,6 +944,8 @@ function spinWheel() {
   if (S.spinning) return;
   S.spinning = true;
   document.getElementById('spin-btn').disabled = true;
+  document.getElementById('wheel-hint').textContent = 'Click the wheel to stop';
+  document.getElementById('wheel-canvas').style.cursor = 'pointer';
 
   const n = S.tasks.length;
   const winnerIdx = Math.floor(Math.random() * n);
@@ -953,13 +958,14 @@ function spinWheel() {
    */
   let targetAngle = -(winnerIdx + 0.5) * sliceAngle;
 
-  /* Ensure we spin at least 5 full rotations forward from current angle */
-  while (targetAngle < S.wheelAngle + 5 * 2 * Math.PI) {
+  /* Ensure we spin at least 7 full rotations forward from current angle */
+  while (targetAngle < S.wheelAngle + 7 * 2 * Math.PI) {
     targetAngle += 2 * Math.PI;
   }
 
   const startAngle = S.wheelAngle;
-  const duration   = 4500;
+  const totalDelta = targetAngle - startAngle;
+  const duration   = 3000;
   const startTime  = performance.now();
 
   function easeOut(t) {
@@ -970,23 +976,73 @@ function spinWheel() {
   function frame(now) {
     const elapsed = now - startTime;
     const t       = Math.min(1, elapsed / duration);
-    const easedT  = easeOut(t);
 
-    S.wheelAngle = startAngle + easedT * (targetAngle - startAngle);
+    /* Track instantaneous velocity (derivative of quartic ease-out) */
+    spinVelocity = 4 * Math.pow(1 - t, 3) * totalDelta / duration;
+
+    S.wheelAngle = startAngle + easeOut(t) * totalDelta;
     drawWheel(S.wheelAngle);
 
     if (t < 1) {
-      requestAnimationFrame(frame);
+      animFrame = requestAnimationFrame(frame);
     } else {
-      /* Normalise to keep angle small for future spins */
-      S.wheelAngle = S.wheelAngle % (2 * Math.PI);
-      S.spinning   = false;
-      S.winner     = S.tasks[winnerIdx];
-      setTimeout(() => showResult(), 500);
+      finishSpin(winnerIdx);
     }
   }
 
-  requestAnimationFrame(frame);
+  animFrame = requestAnimationFrame(frame);
+}
+
+function stopWheelEarly() {
+  if (!S.spinning || spinVelocity < 0.0005) return;
+  cancelAnimationFrame(animFrame);
+  animFrame = null;
+
+  const n = S.tasks.length;
+  const sliceAngle = (2 * Math.PI) / n;
+
+  /* Coast distance: clamp between half a segment and two full rotations */
+  const coastDist = Math.max(sliceAngle * 0.5, Math.min(4 * Math.PI, spinVelocity * 600));
+  const rawTarget = S.wheelAngle + coastDist;
+
+  /* Find the segment whose midpoint is closest to rawTarget */
+  const rawIdx   = -rawTarget / sliceAngle - 0.5;
+  const winnerIdx = ((Math.round(rawIdx) % n) + n) % n;
+
+  /* Snap target to that segment midpoint, ensuring forward motion */
+  let newTarget = -(winnerIdx + 0.5) * sliceAngle;
+  while (newTarget < S.wheelAngle + sliceAngle * 0.1) newTarget += 2 * Math.PI;
+
+  const startAngle   = S.wheelAngle;
+  const dist         = newTarget - startAngle;
+  const coastDuration = Math.max(300, Math.min(1200, dist / spinVelocity * 1.5));
+  const startTime    = performance.now();
+
+  function coastFrame(now) {
+    const elapsed = now - startTime;
+    const t       = Math.min(1, elapsed / coastDuration);
+    const easedT  = 1 - Math.pow(1 - t, 3); /* cubic ease-out */
+
+    S.wheelAngle = startAngle + easedT * dist;
+    drawWheel(S.wheelAngle);
+
+    if (t < 1) {
+      animFrame = requestAnimationFrame(coastFrame);
+    } else {
+      finishSpin(winnerIdx);
+    }
+  }
+
+  animFrame = requestAnimationFrame(coastFrame);
+}
+
+function finishSpin(winnerIdx) {
+  S.wheelAngle = S.wheelAngle % (2 * Math.PI);
+  S.spinning   = false;
+  S.winner     = S.tasks[winnerIdx];
+  document.getElementById('wheel-hint').textContent = 'Lands on a random task';
+  document.getElementById('wheel-canvas').style.cursor = '';
+  setTimeout(() => showResult(), 500);
 }
 
 function goBackToWheel() {
@@ -1262,7 +1318,10 @@ function iconClock() {
 }
 
 /* ── Boot ──────────────────────────────────────────────────────────── */
-window.addEventListener('DOMContentLoaded', init);
+window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('wheel-canvas').addEventListener('click', stopWheelEarly);
+  init();
+});
 </script>
 </body>
 </html>
