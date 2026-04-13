@@ -1703,6 +1703,58 @@ cache -> db: Sync
     editor.addEventListener('keydown', e => {
       const mod = e.ctrlKey || e.metaKey;
 
+      // ── Auto-closing brackets ─────────────────────────────────────────────
+      const BRACKET_PAIRS = { '{': '}', '[': ']', '(': ')' };
+      const CLOSE_BRACKETS = new Set(['}', ']', ')']);
+
+      // Opening bracket → insert pair (or wrap selection)
+      if (!mod && BRACKET_PAIRS[e.key] !== undefined) {
+        e.preventDefault();
+        pushUndo();
+        const s   = editor.selectionStart;
+        const end = editor.selectionEnd;
+        const sel = editor.value.slice(s, end);
+        const close = BRACKET_PAIRS[e.key];
+        if (sel.length > 0) {
+          editor.value = editor.value.slice(0, s) + e.key + sel + close + editor.value.slice(end);
+          editor.selectionStart = s + 1;
+          editor.selectionEnd   = end + 1;
+        } else {
+          editor.value = editor.value.slice(0, s) + e.key + close + editor.value.slice(end);
+          editor.selectionStart = editor.selectionEnd = s + 1;
+        }
+        commitSnap();
+        saveSource(editor.value);
+        scheduleRender();
+        return;
+      }
+
+      // Closing bracket → skip over it if it's already the next character
+      if (!mod && CLOSE_BRACKETS.has(e.key) &&
+          editor.selectionStart === editor.selectionEnd &&
+          editor.value[editor.selectionStart] === e.key) {
+        e.preventDefault();
+        editor.selectionStart = editor.selectionEnd = editor.selectionStart + 1;
+        return;
+      }
+
+      // Backspace → delete both chars when cursor sits inside an empty pair
+      if (e.key === 'Backspace' && !mod && !e.altKey &&
+          editor.selectionStart === editor.selectionEnd) {
+        const s = editor.selectionStart;
+        if (s > 0 && BRACKET_PAIRS[editor.value[s - 1]] === editor.value[s]) {
+          e.preventDefault();
+          pushUndo();
+          editor.value = editor.value.slice(0, s - 1) + editor.value.slice(s + 1);
+          editor.selectionStart = editor.selectionEnd = s - 1;
+          commitSnap();
+          saveSource(editor.value);
+          scheduleRender();
+          return;
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
       // Tab → indent with 2 spaces
       if (e.key === 'Tab') {
         e.preventDefault();
