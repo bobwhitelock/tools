@@ -1674,6 +1674,22 @@ cache -> db: Sync
       if (!findBar.classList.contains('hidden')) updateFindCount();
     });
 
+    // After a paste, ensure the config block is present (adds ELK if not specified).
+    editor.addEventListener('paste', () => {
+      requestAnimationFrame(() => {
+        const source  = editor.value;
+        const cfg     = parseD2Config(source);
+        const withCfg = applyConfig(source, cfg.layoutEngine, cfg.sketch);
+        if (withCfg === source) return;
+        const cursorAfter = editor.selectionStart + (withCfg.length - source.length);
+        editor.value = withCfg;
+        editor.selectionStart = editor.selectionEnd = Math.max(0, cursorAfter);
+        saveSource(withCfg);
+        syncControls(withCfg);
+        scheduleRender();
+      });
+    });
+
     editor.addEventListener('keydown', e => {
       const mod = e.ctrlKey || e.metaKey;
 
@@ -1847,12 +1863,14 @@ cache -> db: Sync
     function applyReset(source, toastMsg) {
       closeResetModal();
       pushUndo();
-      editor.value             = source;
+      const cfg        = parseD2Config(source);
+      const withCfg    = applyConfig(source, cfg.layoutEngine, cfg.sketch);
+      editor.value             = withCfg;
       commitSnap();
       currentSvg               = '';
       previewContent.innerHTML = '';
-      syncControls(source);
-      saveSource(source);
+      syncControls(withCfg);
+      saveSource(withCfg);
       showToast(toastMsg);
       scheduleRender();
     }
