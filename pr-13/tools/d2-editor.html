@@ -1700,34 +1700,40 @@ cache -> db: Sync
       if (!findBar.classList.contains('hidden')) updateFindCount();
     });
 
+    // ── Auto-closing brackets ───────────────────────────────────────────────
+    // Uses beforeinput (fires before DOM change, cancels reliably) for pair
+    // insertion, and keydown for skip-over / pair-delete behaviours.
+    const BRACKET_PAIRS  = { '{': '}', '[': ']', '(': ')' };
+    const CLOSE_BRACKETS = new Set(['}', ']', ')']);
+
+    editor.addEventListener('beforeinput', e => {
+      if (e.inputType !== 'insertText') return;
+      const close = BRACKET_PAIRS[e.data];
+      if (close === undefined) return;
+
+      e.preventDefault();
+      pushUndo();
+      const s   = editor.selectionStart;
+      const end = editor.selectionEnd;
+      const sel = editor.value.slice(s, end);
+      if (sel.length > 0) {
+        // Wrap the selection with the bracket pair
+        editor.value = editor.value.slice(0, s) + e.data + sel + close + editor.value.slice(end);
+        editor.selectionStart = s + 1;
+        editor.selectionEnd   = end + 1;
+      } else {
+        // Insert pair and place cursor between them
+        editor.value = editor.value.slice(0, s) + e.data + close + editor.value.slice(end);
+        editor.selectionStart = editor.selectionEnd = s + 1;
+      }
+      commitSnap();
+      saveSource(editor.value);
+      scheduleRender();
+    });
+    // ────────────────────────────────────────────────────────────────────────
+
     editor.addEventListener('keydown', e => {
       const mod = e.ctrlKey || e.metaKey;
-
-      // ── Auto-closing brackets ─────────────────────────────────────────────
-      const BRACKET_PAIRS = { '{': '}', '[': ']', '(': ')' };
-      const CLOSE_BRACKETS = new Set(['}', ']', ')']);
-
-      // Opening bracket → insert pair (or wrap selection)
-      if (!mod && BRACKET_PAIRS[e.key] !== undefined) {
-        e.preventDefault();
-        pushUndo();
-        const s   = editor.selectionStart;
-        const end = editor.selectionEnd;
-        const sel = editor.value.slice(s, end);
-        const close = BRACKET_PAIRS[e.key];
-        if (sel.length > 0) {
-          editor.value = editor.value.slice(0, s) + e.key + sel + close + editor.value.slice(end);
-          editor.selectionStart = s + 1;
-          editor.selectionEnd   = end + 1;
-        } else {
-          editor.value = editor.value.slice(0, s) + e.key + close + editor.value.slice(end);
-          editor.selectionStart = editor.selectionEnd = s + 1;
-        }
-        commitSnap();
-        saveSource(editor.value);
-        scheduleRender();
-        return;
-      }
 
       // Closing bracket → skip over it if it's already the next character
       if (!mod && CLOSE_BRACKETS.has(e.key) &&
@@ -1753,7 +1759,6 @@ cache -> db: Sync
           return;
         }
       }
-      // ─────────────────────────────────────────────────────────────────────
 
       // Tab → indent with 2 spaces
       if (e.key === 'Tab') {
