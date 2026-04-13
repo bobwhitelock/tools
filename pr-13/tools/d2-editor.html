@@ -1760,6 +1760,29 @@ cache -> db: Sync
         }
       }
 
+      // Enter inside a bracket pair → expand to indented block
+      //   {|}  →  {\n    |\n}  (| = cursor, indented by current line + 2 spaces)
+      if (e.key === 'Enter' && !mod &&
+          editor.selectionStart === editor.selectionEnd) {
+        const s = editor.selectionStart;
+        if (s > 0 && BRACKET_PAIRS[editor.value[s - 1]] === editor.value[s]) {
+          e.preventDefault();
+          pushUndo();
+          // Find indentation of the current line
+          const lineStart = editor.value.lastIndexOf('\n', s - 1) + 1;
+          const lineIndent = editor.value.slice(lineStart, s).match(/^(\s*)/)[1];
+          const innerIndent = lineIndent + '  ';
+          // Insert: newline + inner indent + newline + outer indent, keeping the closing bracket
+          const insertion = '\n' + innerIndent + '\n' + lineIndent;
+          editor.value = editor.value.slice(0, s) + insertion + editor.value.slice(s);
+          editor.selectionStart = editor.selectionEnd = s + 1 + innerIndent.length;
+          commitSnap();
+          saveSource(editor.value);
+          scheduleRender();
+          return;
+        }
+      }
+
       // Tab → indent with 2 spaces
       if (e.key === 'Tab') {
         e.preventDefault();
