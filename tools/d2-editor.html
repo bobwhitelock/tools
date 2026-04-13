@@ -799,6 +799,12 @@
     /* GitHub toolbar button */
     .editor-toolbar-btn.btn-gh { border-color: #3d4f3d; color: #6db36d; }
     .editor-toolbar-btn.btn-gh:active { background: #1e2d1e; color: #8ed98e; }
+
+    /* PR link button in manage panel */
+    .gh-pr-link { color: var(--accent); border-color: #c7c7f0; background: #f3f3fd; text-decoration: none; }
+    .gh-pr-link:active { background: #eaeaf9; }
+    .gh-pr-link .btn-icon { color: var(--accent); }
+    .gh-pr-link.hidden { display: none; }
   </style>
 </head>
 <body>
@@ -951,6 +957,13 @@
             </svg>
             Save to GitHub (create PR)
           </button>
+          <a class="btn gh-pr-link hidden" id="gh-pr-link" href="#" target="_blank" rel="noopener">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
+              <path d="M6 9v6"/><path d="M15.7 16.3L9 9"/>
+            </svg>
+            <span id="gh-pr-link-text">View PR</span>
+          </a>
         </div>
       </div>
 
@@ -2404,6 +2417,14 @@ cache -> db: Sync
         });
 
         ghSaveContext({ owner, repo, path: d2Path, sha: null, branch: defaultBranch });
+
+        // Show persistent PR link in the Export tab
+        const prLinkEl   = document.getElementById('gh-pr-link');
+        const prLinkText = document.getElementById('gh-pr-link-text');
+        prLinkEl.href         = prData.html_url;
+        prLinkText.textContent = prData.html_url.replace('https://github.com/', '');
+        prLinkEl.classList.remove('hidden');
+
         showToast('PR created!');
         window.open(prData.html_url, '_blank', 'noopener');
       } catch (err) {
