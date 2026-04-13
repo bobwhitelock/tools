@@ -57,15 +57,6 @@
       letter-spacing: -0.3px;
     }
 
-    .hdr-badge {
-      font-size: 11px;
-      font-weight: 700;
-      background: #ededfa;
-      color: var(--accent);
-      border-radius: 8px;
-      padding: 2px 8px;
-    }
-
     .hdr-status {
       margin-left: auto;
       font-size: 12px;
@@ -107,6 +98,116 @@
 
     /* ── Editor panel ─────────────────────────── */
     #panel-editor { background: #1e1e2e; }
+
+    .editor-toolbar {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 6px 10px;
+      background: #181825;
+      border-bottom: 1px solid #313244;
+    }
+
+    .editor-toolbar-btn {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 11px;
+      border: 1px solid #45475a;
+      border-radius: 7px;
+      background: transparent;
+      color: #a6adc8;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: background .12s, color .12s;
+    }
+
+    .editor-toolbar-btn:active { background: #313244; color: #cdd6f4; }
+    .editor-toolbar-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+    /* ── Reset modal ──────────────────────────── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.45);
+      z-index: 300;
+      display: flex;
+      align-items: flex-end;
+      animation: fade-in .15s ease;
+    }
+
+    .modal-overlay.hidden { display: none; }
+
+    @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+    .modal-sheet {
+      width: 100%;
+      background: var(--surface);
+      border-radius: 20px 20px 0 0;
+      padding: 20px 16px calc(20px + var(--safe-b));
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      animation: slide-up .2s ease;
+    }
+
+    @keyframes slide-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+    .modal-title {
+      font-size: 16px;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 2px;
+    }
+
+    .modal-desc {
+      font-size: 13px;
+      color: var(--muted);
+      text-align: center;
+      margin-bottom: 4px;
+    }
+
+    .modal-btn {
+      width: 100%;
+      min-height: 56px;
+      border: 1.5px solid var(--border);
+      border-radius: 13px;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      padding: 10px 16px;
+      gap: 2px;
+      transition: background .12s, transform .08s;
+      -webkit-tap-highlight-color: transparent;
+      text-align: left;
+    }
+
+    .modal-btn:active { background: var(--bg); transform: scale(.98); }
+
+    .modal-btn-sub {
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--muted);
+    }
+
+    .modal-btn-danger { background: var(--danger-bg); border-color: var(--danger-bdr); color: var(--danger); }
+    .modal-btn-danger .modal-btn-sub { color: #f87171; }
+    .modal-btn-danger:active { background: #fee2e2; }
+
+    .modal-cancel {
+      margin-top: 2px;
+      background: var(--bg);
+      color: var(--muted);
+      font-weight: 600;
+    }
 
     #editor {
       flex: 1;
@@ -430,7 +531,6 @@
   <!-- Header -->
   <header class="hdr">
     <span class="hdr-title">D2 Editor</span>
-    <span class="hdr-badge">WASM</span>
     <span class="hdr-status">
       <span class="hdr-status-dot loading" id="status-dot"></span>
       <span id="status-text">Loading…</span>
@@ -442,6 +542,14 @@
 
     <!-- Editor -->
     <div id="panel-editor" class="panel active">
+      <div class="editor-toolbar">
+        <button class="editor-toolbar-btn" id="btn-open-reset">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>
+          </svg>
+          Reset
+        </button>
+      </div>
       <textarea id="editor"
         spellcheck="false"
         autocorrect="off"
@@ -457,7 +565,7 @@
         <select id="layout-select" class="ctrl-select" title="Layout engine">
           <option value="dagre">Dagre</option>
           <option value="elk">ELK</option>
-          <option value="tala">TALA</option>
+          <option value="tala" disabled>TALA (unavailable in browser)</option>
         </select>
         <div class="ctrl-divider"></div>
         <label class="toggle-wrap" title="Sketch (hand-drawn) rendering">
@@ -515,17 +623,6 @@
         </div>
       </div>
 
-      <div class="section">
-        <div class="section-title">Danger zone</div>
-        <div class="btn-stack">
-          <button class="btn btn-danger" id="btn-clear">
-            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
-            </svg>
-            Clear everything
-          </button>
-        </div>
-      </div>
     </div>
 
   </main>
@@ -552,6 +649,23 @@
     </button>
   </nav>
 
+  <!-- Reset modal (bottom sheet) -->
+  <div class="modal-overlay hidden" id="modal-reset">
+    <div class="modal-sheet">
+      <div class="modal-title">Reset editor</div>
+      <div class="modal-desc">Choose what to replace the current source with:</div>
+      <button class="modal-btn" id="btn-blank">
+        Clear to blank
+        <span class="modal-btn-sub">Empty diagram — start from scratch</span>
+      </button>
+      <button class="modal-btn modal-btn-danger" id="btn-example">
+        Reset to example
+        <span class="modal-btn-sub">Restore the built-in sample diagram</span>
+      </button>
+      <button class="modal-btn modal-cancel" id="btn-modal-cancel">Cancel</button>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script type="module">
@@ -568,7 +682,7 @@
     const DEFAULT_SOURCE =
 `vars: {
   d2-config: {
-    layout-engine: dagre
+    layout-engine: elk
   }
 }
 
@@ -618,7 +732,7 @@ cache -> db: Sync
       const layoutMatch = source.match(/layout-engine:\s*(\w+)/);
       const sketchMatch = source.match(/sketch:\s*true/);
       return {
-        layoutEngine: layoutMatch ? layoutMatch[1] : 'dagre',
+        layoutEngine: layoutMatch ? layoutMatch[1] : 'elk',
         sketch:       !!sketchMatch,
       };
     }
@@ -756,8 +870,9 @@ cache -> db: Sync
       saveSource(source);
 
       // Sync controls to whatever the user typed
+      // (TALA is not available in browser; fall back to ELK)
       const cfg = parseD2Config(source);
-      layoutSelect.value   = cfg.layoutEngine;
+      layoutSelect.value   = cfg.layoutEngine === 'tala' ? 'elk' : cfg.layoutEngine;
       sketchToggle.checked = cfg.sketch;
 
       scheduleRender();
@@ -886,19 +1001,42 @@ cache -> db: Sync
       }
     });
 
-    document.getElementById('btn-clear').addEventListener('click', () => {
-      if (!confirm('Reset the editor to the default example? Your current source will be lost.')) return;
+    // ─── Reset modal ──────────────────────────────────────────────────────────
+
+    const modalEl = document.getElementById('modal-reset');
+
+    function openResetModal() { modalEl.classList.remove('hidden'); }
+    function closeResetModal() { modalEl.classList.add('hidden'); }
+
+    document.getElementById('btn-open-reset').addEventListener('click', openResetModal);
+    document.getElementById('btn-modal-cancel').addEventListener('click', closeResetModal);
+
+    // Close on backdrop tap
+    modalEl.addEventListener('click', e => { if (e.target === modalEl) closeResetModal(); });
+
+    function applyReset(source, toastMsg) {
+      closeResetModal();
       try { localStorage.removeItem(LS_KEY); } catch (_) {}
-      editor.value        = DEFAULT_SOURCE;
-      currentSvg          = '';
+      editor.value             = source;
+      currentSvg               = '';
       previewContent.innerHTML = '';
-
-      const cfg = parseD2Config(DEFAULT_SOURCE);
-      layoutSelect.value   = cfg.layoutEngine;
+      const cfg = parseD2Config(source);
+      layoutSelect.value   = cfg.layoutEngine === 'tala' ? 'elk' : cfg.layoutEngine;
       sketchToggle.checked = cfg.sketch;
-
-      showToast('Cleared — reset to default');
+      saveSource(source);
+      showToast(toastMsg);
       scheduleRender();
+    }
+
+    document.getElementById('btn-blank').addEventListener('click', () => {
+      applyReset(
+        buildConfigBlock(layoutSelect.value, sketchToggle.checked),
+        'Cleared to blank'
+      );
+    });
+
+    document.getElementById('btn-example').addEventListener('click', () => {
+      applyReset(DEFAULT_SOURCE, 'Reset to example');
     });
 
     // ─── Init ─────────────────────────────────────────────────────────────────
@@ -908,9 +1046,9 @@ cache -> db: Sync
       const source = loadSource();
       editor.value = source;
 
-      // Sync controls
+      // Sync controls (TALA unavailable in browser → fall back to ELK)
       const cfg = parseD2Config(source);
-      layoutSelect.value   = cfg.layoutEngine;
+      layoutSelect.value   = cfg.layoutEngine === 'tala' ? 'elk' : cfg.layoutEngine;
       sketchToggle.checked = cfg.sketch;
 
       // Load D2 WASM
