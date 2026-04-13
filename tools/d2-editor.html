@@ -950,11 +950,72 @@ cache -> db: Sync
     }
 
     /**
-     * Replace (or insert) the config block at the top of source.
+     * Update layout-engine and sketch inside the existing vars { d2-config {} }
+     * block if present, preserving any other keys (e.g. theme-id).
+     * Falls back to prepending a fresh block when none exists.
      */
     function applyConfig(source, layoutEngine, sketch) {
-      const userContent = stripConfigBlock(source);
-      return buildConfigBlock(layoutEngine, sketch) + userContent;
+      const lines = source.split('\n');
+      let i = 0;
+      while (i < lines.length && lines[i].trim() === '') i++;
+
+      // No vars block at top — prepend a fresh one
+      if (i >= lines.length || !lines[i].trim().startsWith('vars:')) {
+        return buildConfigBlock(layoutEngine, sketch) + source.trimStart();
+      }
+
+      // Walk to end of the vars block using brace counting
+      let depth = 0, endLine = i, hasD2 = false;
+      for (let j = i; j < lines.length; j++) {
+        for (const ch of lines[j]) {
+          if (ch === '{') depth++;
+          else if (ch === '}') depth--;
+        }
+        if (lines[j].trim().startsWith('d2-config')) hasD2 = true;
+        endLine = j;
+        if (j > i && depth === 0) break;
+        if (j === i && depth === 0) break;
+      }
+
+      // vars block has no d2-config section — prepend fresh block above it
+      if (!hasD2) return buildConfigBlock(layoutEngine, sketch) + source.trimStart();
+
+      const before = lines.slice(0, i);
+      const block  = lines.slice(i, endLine + 1);
+      const after  = lines.slice(endLine + 1);
+
+      let layoutSet = false, sketchSet = false;
+      const newBlock = block.reduce((acc, line) => {
+        const t = line.trim();
+        if (t.startsWith('layout-engine:')) {
+          acc.push(line.replace(/layout-engine:\s*\S+/, `layout-engine: ${layoutEngine}`));
+          layoutSet = true;
+        } else if (t.startsWith('sketch:')) {
+          if (sketch) acc.push(line.replace(/sketch:\s*\S+/, 'sketch: true'));
+          // drop the line entirely when sketch is disabled
+          sketchSet = true;
+        } else {
+          acc.push(line);
+        }
+        return acc;
+      }, []);
+
+      // Insert layout-engine after d2-config opening if it wasn't found
+      if (!layoutSet) {
+        const d2Idx = newBlock.findIndex(l => l.trim().startsWith('d2-config'));
+        if (d2Idx >= 0) {
+          const insertAt = d2Idx + (newBlock[d2Idx].includes('{') ? 1 : 2);
+          newBlock.splice(insertAt, 0, `    layout-engine: ${layoutEngine}`);
+        }
+      }
+
+      // Insert sketch: true after layout-engine if needed
+      if (!sketchSet && sketch) {
+        const lIdx = newBlock.findIndex(l => l.trim().startsWith('layout-engine:'));
+        if (lIdx >= 0) newBlock.splice(lIdx + 1, 0, '    sketch: true');
+      }
+
+      return [...before, ...newBlock, ...after].join('\n');
     }
 
     // ─── Rendering ────────────────────────────────────────────────────────────
@@ -1151,16 +1212,20 @@ cache -> db: Sync
     }
 
     /**
-     * Silently pre-select the first match at/after the cursor without stealing
-     * focus from the find input. On desktop the inactive selection is visible;
-     * on mobile it at least primes the cursor position and shows "1 of N".
+     * Silently pre-select the first match by briefly focusing the editor then
+     * immediately restoring focus to wherever it was (find input, etc.).
+     * The browser keeps the inactive selection visible without stealing keyboard focus.
      */
     function autoSelectFirstMatch() {
-      if (matchList.length === 0) return;
+      if (matchList.length === 0) { matchCursor = -1; return; }
       const pos   = editor.selectionStart;
       const first = matchList.findIndex(m => m.start >= pos);
       matchCursor = first >= 0 ? first : 0;
-      try { editor.setSelectionRange(matchList[matchCursor].start, matchList[matchCursor].end); } catch {}
+      const m    = matchList[matchCursor];
+      const prev = document.activeElement;
+      editor.focus({ preventScroll: true });
+      editor.setSelectionRange(m.start, m.end);
+      if (prev && prev !== editor) prev.focus({ preventScroll: true });
     }
 
     /** Rebuild match list, auto-select the first result, and re-render count. */
@@ -1172,17 +1237,17 @@ cache -> db: Sync
 
     /**
      * Navigate to a specific match index (wraps around).
-     * focusEditor=true  → focus the textarea (explicit user navigation).
-     * focusEditor=false → keep focus where it is (e.g. after single replace).
+     * Always blurs the editor after selecting so the keyboard stays hidden on mobile.
      */
-    function goToMatch(idx, focusEditor = true) {
+    function goToMatch(idx) {
       if (matchList.length === 0) return;
       const n       = matchList.length;
       const didWrap = idx >= n || idx < 0;
       matchCursor   = ((idx % n) + n) % n;
       const m       = matchList[matchCursor];
-      if (focusEditor) editor.focus();
-      try { editor.setSelectionRange(m.start, m.end); } catch {}
+      editor.focus({ preventScroll: true });
+      editor.setSelectionRange(m.start, m.end);
+      editor.blur();
       renderCount();
       if (didWrap) showToast(idx >= n ? '↩ Wrapped to top' : '↩ Wrapped to bottom');
     }
@@ -1231,7 +1296,7 @@ cache -> db: Sync
       rebuildMatchList();
 
       if (matchList.length > 0) {
-        goToMatch(prevCursor < matchList.length ? prevCursor : matchList.length - 1, false);
+        goToMatch(prevCursor < matchList.length ? prevCursor : matchList.length - 1);
       } else {
         renderCount();
         showToast('No more matches');
