@@ -337,9 +337,18 @@
 
     .find-opt-label input[type=checkbox] { accent-color: var(--accent); }
 
-    #editor {
+    .editor-wrap {
       flex: 1;
+      position: relative;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    #editor {
+      position: absolute;
+      inset: 0;
       width: 100%;
+      height: 100%;
       resize: none;
       border: none;
       outline: none;
@@ -352,6 +361,36 @@
       tab-size: 2;
       caret-color: #cba6f7;
       -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Mirror: invisible clone used to measure text positions for the highlight overlay */
+    #editor-mirror {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      visibility: hidden;
+      pointer-events: none;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: break-word;
+      overflow: visible;
+      padding: 16px;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+      font-size: 14px;
+      line-height: 1.65;
+      tab-size: 2;
+      box-sizing: border-box;
+      color: transparent;
+    }
+
+    /* Highlight overlay — drawn on top of textarea, pointer-events:none so it doesn't block input */
+    #editor-hl {
+      position: absolute;
+      display: none;
+      pointer-events: none;
+      background: rgba(250, 189, 47, 0.45);
+      border-radius: 2px;
+      z-index: 1;
     }
 
     #editor::selection { background: #45475a; }
@@ -711,12 +750,17 @@
         </div>
       </div>
 
-      <textarea id="editor"
-        spellcheck="false"
-        autocorrect="off"
-        autocapitalize="off"
-        autocomplete="off"
-      ></textarea>
+      <div class="editor-wrap">
+        <textarea id="editor"
+          spellcheck="false"
+          autocorrect="off"
+          autocapitalize="off"
+          autocomplete="off"
+        ></textarea>
+        <!-- Mirror + overlay for match highlighting independent of focus state -->
+        <div id="editor-mirror" aria-hidden="true"></div>
+        <div id="editor-hl" aria-hidden="true"></div>
+      </div>
     </div>
 
     <!-- Preview -->
@@ -869,6 +913,8 @@ cache -> db: Sync
     // ─── DOM refs ─────────────────────────────────────────────────────────────
 
     const editor        = document.getElementById('editor');
+    const editorMirror  = document.getElementById('editor-mirror');
+    const editorHl      = document.getElementById('editor-hl');
     const layoutSelect  = document.getElementById('layout-select');
     const sketchToggle  = document.getElementById('sketch-toggle');
     const previewContent= document.getElementById('preview-content');
@@ -1163,6 +1209,55 @@ cache -> db: Sync
     const btnFindPrev  = document.getElementById('btn-find-prev');
     const btnFindNext  = document.getElementById('btn-find-next');
 
+    // ─── Match highlight overlay ──────────────────────────────────────────────
+    // Uses a hidden mirror div to measure text positions, then positions an
+    // overlay div over the textarea. Works regardless of focus state (fixes mobile).
+
+    function showMatchOverlay(m) {
+      const text = editor.value;
+      // Build mirror content: plain text before match, a span for the match, plain text after
+      editorMirror.textContent = '';
+      editorMirror.appendChild(document.createTextNode(text.slice(0, m.start)));
+      const span = document.createElement('span');
+      span.textContent = text.slice(m.start, m.end) || '\u200b'; // zero-width space so empty match has measurable height
+      editorMirror.appendChild(span);
+      editorMirror.appendChild(document.createTextNode(text.slice(m.end)));
+
+      // Offset mirror by editor's scroll position so span lands at the right visual coordinates
+      editorMirror.style.top  = -editor.scrollTop  + 'px';
+      editorMirror.style.left = -editor.scrollLeft + 'px';
+
+      const spanRect = span.getBoundingClientRect();
+      const wrapRect = editor.parentElement.getBoundingClientRect();
+      const top    = spanRect.top  - wrapRect.top;
+      const left   = spanRect.left - wrapRect.left;
+      const width  = spanRect.width;
+      const height = spanRect.height;
+
+      // Hide if match is fully outside the visible area
+      if (top + height < 0 || top > wrapRect.height || left + width < 0 || left > wrapRect.width) {
+        editorHl.style.display = 'none';
+        return;
+      }
+
+      editorHl.style.top     = top    + 'px';
+      editorHl.style.left    = left   + 'px';
+      editorHl.style.width   = (width  || 6) + 'px';
+      editorHl.style.height  = height + 'px';
+      editorHl.style.display = 'block';
+    }
+
+    function hideMatchOverlay() { editorHl.style.display = 'none'; }
+
+    // Re-render overlay when user scrolls the editor (match may have moved on screen)
+    editor.addEventListener('scroll', () => {
+      if (matchCursor >= 0 && !document.getElementById('find-bar').classList.contains('hidden')) {
+        showMatchOverlay(matchList[matchCursor]);
+      }
+    });
+
+    // ─── Match state ──────────────────────────────────────────────────────────
+
     // Match navigation state
     let matchList   = [];  // [{start, end, text}] for the current query
     let matchCursor = -1;  // index of currently highlighted match (-1 = none)
@@ -1212,20 +1307,15 @@ cache -> db: Sync
     }
 
     /**
-     * Silently pre-select the first match by briefly focusing the editor then
-     * immediately restoring focus to wherever it was (find input, etc.).
-     * The browser keeps the inactive selection visible without stealing keyboard focus.
+     * Highlight the first match using the overlay (works on all platforms regardless
+     * of focus state — inactive textarea selections are invisible on Android/iOS).
      */
     function autoSelectFirstMatch() {
-      if (matchList.length === 0) { matchCursor = -1; return; }
+      if (matchList.length === 0) { matchCursor = -1; hideMatchOverlay(); return; }
       const pos   = editor.selectionStart;
       const first = matchList.findIndex(m => m.start >= pos);
       matchCursor = first >= 0 ? first : 0;
-      const m    = matchList[matchCursor];
-      const prev = document.activeElement;
-      editor.focus({ preventScroll: true });
-      editor.setSelectionRange(m.start, m.end);
-      if (prev && prev !== editor) prev.focus({ preventScroll: true });
+      showMatchOverlay(matchList[matchCursor]);
     }
 
     /** Rebuild match list, auto-select the first result, and re-render count. */
@@ -1237,8 +1327,8 @@ cache -> db: Sync
 
     /**
      * Navigate to a specific match index (wraps around).
-     * Uses readOnly to focus+show the selection without triggering the keyboard on mobile.
-     * Restores readOnly state after one frame so the editor remains editable.
+     * Uses the readOnly trick to scroll the editor to the match without triggering
+     * the keyboard, then shows the overlay highlight and blurs so the cursor stays hidden.
      */
     function goToMatch(idx) {
       if (matchList.length === 0) return;
@@ -1246,11 +1336,18 @@ cache -> db: Sync
       const didWrap = idx >= n || idx < 0;
       matchCursor   = ((idx % n) + n) % n;
       const m       = matchList[matchCursor];
+
+      // Scroll editor to the match position without triggering keyboard
       const wasReadOnly = editor.readOnly;
       editor.readOnly = true;
       editor.focus({ preventScroll: true });
       editor.setSelectionRange(m.start, m.end);
-      requestAnimationFrame(() => { editor.readOnly = wasReadOnly; });
+      editor.blur();
+      editor.readOnly = wasReadOnly;
+
+      // Update overlay after the scroll has been applied
+      showMatchOverlay(m);
+
       renderCount();
       if (didWrap) showToast(idx >= n ? '↩ Wrapped to top' : '↩ Wrapped to bottom');
     }
@@ -1341,6 +1438,7 @@ cache -> db: Sync
     function closeFindBar() {
       findBar.classList.add('hidden');
       matchCursor = -1;
+      hideMatchOverlay();
       editor.focus();
     }
 
