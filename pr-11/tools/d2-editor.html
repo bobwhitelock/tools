@@ -1237,7 +1237,8 @@ cache -> db: Sync
 
     /**
      * Navigate to a specific match index (wraps around).
-     * Always blurs the editor after selecting so the keyboard stays hidden on mobile.
+     * Uses readOnly to focus+show the selection without triggering the keyboard on mobile.
+     * Restores readOnly state after one frame so the editor remains editable.
      */
     function goToMatch(idx) {
       if (matchList.length === 0) return;
@@ -1245,9 +1246,11 @@ cache -> db: Sync
       const didWrap = idx >= n || idx < 0;
       matchCursor   = ((idx % n) + n) % n;
       const m       = matchList[matchCursor];
+      const wasReadOnly = editor.readOnly;
+      editor.readOnly = true;
       editor.focus({ preventScroll: true });
       editor.setSelectionRange(m.start, m.end);
-      editor.blur();
+      requestAnimationFrame(() => { editor.readOnly = wasReadOnly; });
       renderCount();
       if (didWrap) showToast(idx >= n ? '↩ Wrapped to top' : '↩ Wrapped to bottom');
     }
@@ -1558,10 +1561,7 @@ cache -> db: Sync
     }
 
     document.getElementById('btn-blank').addEventListener('click', () => {
-      applyReset(
-        buildConfigBlock(layoutSelect.value, sketchToggle.checked),
-        'Cleared to blank'
-      );
+      applyReset('', 'Cleared to blank');
     });
 
     document.getElementById('btn-example').addEventListener('click', () => {
