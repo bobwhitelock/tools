@@ -274,6 +274,25 @@
 
     .find-replace-btn:active { background: var(--accent-dk); }
 
+    .find-nav-btn {
+      flex-shrink: 0;
+      width: 34px;
+      height: 36px;
+      border: 1px solid #45475a;
+      border-radius: 8px;
+      background: transparent;
+      color: #a6adc8;
+      font-size: 15px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .find-nav-btn:active { background: #313244; }
+    .find-nav-btn:disabled { opacity: .35; cursor: default; }
+
     .find-close-btn {
       flex-shrink: 0;
       width: 36px;
@@ -292,6 +311,13 @@
     }
 
     .find-close-btn:active { background: #313244; }
+
+    .find-replace-one {
+      background: #313244;
+      color: #cdd6f4;
+    }
+
+    .find-replace-one:active { background: #45475a; }
 
     .find-options {
       display: flex;
@@ -664,13 +690,16 @@
         <div class="find-row">
           <input id="find-input" class="find-input" placeholder="Find…" type="search"
             autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
+          <button class="find-nav-btn" id="btn-find-prev" title="Previous match (Shift+Enter)" disabled>↑</button>
+          <button class="find-nav-btn" id="btn-find-next" title="Next match (Enter)" disabled>↓</button>
           <span class="find-count" id="find-count"></span>
+          <button class="find-close-btn" id="btn-find-close" title="Close (Esc)">×</button>
         </div>
         <div class="find-row">
           <input id="replace-input" class="find-input" placeholder="Replace with…" type="text"
             autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
-          <button class="find-replace-btn" id="btn-replace-all">Replace all</button>
-          <button class="find-close-btn" id="btn-find-close" title="Close (Esc)">×</button>
+          <button class="find-replace-btn find-replace-one" id="btn-replace-one">Replace</button>
+          <button class="find-replace-btn" id="btn-replace-all">All</button>
         </div>
         <div class="find-options">
           <label class="find-opt-label">
@@ -1070,25 +1099,159 @@ cache -> db: Sync
     const findCountEl  = document.getElementById('find-count');
     const findCaseEl   = document.getElementById('find-case');
     const findRegexEl  = document.getElementById('find-regex');
+    const btnFindPrev  = document.getElementById('btn-find-prev');
+    const btnFindNext  = document.getElementById('btn-find-next');
 
-    function buildFindRegex(q) {
-      const flags = findCaseEl.checked ? 'g' : 'gi';
-      if (findRegexEl.checked) return new RegExp(q, flags);
-      return new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
+    // Match navigation state
+    let matchList   = [];  // [{start, end, text}] for the current query
+    let matchCursor = -1;  // index of currently highlighted match (-1 = none)
+
+    /** Build a RegExp for the current query. global=true adds the g flag. */
+    function buildRegex(q, global) {
+      const flags = (findCaseEl.checked ? '' : 'i') + (global ? 'g' : '');
+      const pattern = findRegexEl.checked
+        ? q
+        : q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(pattern, flags);
     }
 
-    function updateFindCount() {
+    /** Rebuild matchList from the current editor content + query. Resets matchCursor. */
+    function rebuildMatchList() {
+      matchList   = [];
+      matchCursor = -1;
       const q = findInput.value;
-      if (!q) { findCountEl.textContent = ''; findCountEl.className = 'find-count'; return; }
+      if (!q) return;
       try {
-        const m = editor.value.match(buildFindRegex(q));
-        const n = m ? m.length : 0;
+        const r   = buildRegex(q, true);
+        const src = editor.value;
+        let m;
+        while ((m = r.exec(src)) !== null) {
+          matchList.push({ start: m.index, end: m.index + m[0].length, text: m[0] });
+          if (m[0].length === 0) r.lastIndex++;
+        }
+      } catch { /* invalid regex — leave matchList empty */ }
+    }
+
+    /** Render the count/navigation label and update nav button states. */
+    function renderCount() {
+      const n = matchList.length;
+      const q = findInput.value;
+      if (!q) {
+        findCountEl.textContent = '';
+        findCountEl.className   = 'find-count';
+      } else if (matchCursor >= 0 && n > 0) {
+        findCountEl.textContent = `${matchCursor + 1} of ${n}`;
+        findCountEl.className   = 'find-count has-match';
+      } else {
         findCountEl.textContent = n === 0 ? 'No matches' : `${n} match${n === 1 ? '' : 'es'}`;
         findCountEl.className   = 'find-count ' + (n === 0 ? 'no-match' : 'has-match');
-      } catch {
-        findCountEl.textContent = 'Bad pattern';
-        findCountEl.className   = 'find-count no-match';
       }
+      btnFindPrev.disabled = n === 0;
+      btnFindNext.disabled = n === 0;
+    }
+
+    /** Rebuild match list and re-render count (call when query or source changes). */
+    function updateFindCount() {
+      rebuildMatchList();
+      renderCount();
+    }
+
+    /** Select the match at matchCursor in the textarea and scroll it into view. */
+    function selectCurrentMatch() {
+      if (matchCursor < 0 || matchCursor >= matchList.length) return;
+      const m = matchList[matchCursor];
+      editor.focus();
+      editor.setSelectionRange(m.start, m.end);
+      renderCount();
+    }
+
+    /** Navigate to a specific match index (wraps around). */
+    function goToMatch(idx) {
+      if (matchList.length === 0) return;
+      matchCursor = ((idx % matchList.length) + matchList.length) % matchList.length;
+      selectCurrentMatch();
+    }
+
+    function nextMatch() {
+      if (matchList.length === 0) { showToast('No matches'); return; }
+      if (matchCursor < 0) {
+        // Start from the cursor position in the editor
+        const pos   = editor.selectionStart;
+        const first = matchList.findIndex(m => m.start >= pos);
+        goToMatch(first >= 0 ? first : 0);
+      } else {
+        goToMatch(matchCursor + 1);
+      }
+    }
+
+    function prevMatch() {
+      if (matchList.length === 0) { showToast('No matches'); return; }
+      if (matchCursor < 0) {
+        goToMatch(matchList.length - 1);
+      } else {
+        goToMatch(matchCursor - 1);
+      }
+    }
+
+    /** Replace the currently highlighted match and advance to the next. */
+    function replaceCurrent() {
+      if (matchList.length === 0) { showToast('No matches'); return; }
+
+      // If not yet on a match, navigate there first (second tap will replace)
+      if (matchCursor < 0) { nextMatch(); return; }
+
+      pushUndo();
+      const m   = matchList[matchCursor];
+      let   rep = replaceInput.value;
+
+      // For regex mode honour backreferences ($1, $2, $&, …)
+      if (findRegexEl.checked) {
+        try { rep = m.text.replace(buildRegex(findInput.value, false), rep); } catch { /* use literal */ }
+      }
+
+      const src    = editor.value;
+      const newSrc = src.slice(0, m.start) + rep + src.slice(m.end);
+      editor.value = newSrc;
+      commitSnap();
+      saveSource(newSrc);
+      syncControls(newSrc);
+      scheduleRender();
+
+      // Rebuild from new source; the replaced match is gone, cursor stays at same index
+      const prevCursor = matchCursor;
+      rebuildMatchList();
+
+      if (matchList.length > 0) {
+        goToMatch(prevCursor < matchList.length ? prevCursor : matchList.length - 1);
+      } else {
+        renderCount();
+        showToast('No more matches');
+      }
+    }
+
+    /** Replace every match at once. */
+    function replaceAll() {
+      const q = findInput.value;
+      if (!q) return;
+      let regex;
+      try { regex = buildRegex(q, true); } catch { showToast('Invalid regex pattern'); return; }
+
+      const src   = editor.value;
+      const count = (src.match(regex) || []).length;
+      if (count === 0) { showToast('No matches found'); return; }
+
+      pushUndo();
+      const newSrc = src.replace(regex, replaceInput.value);
+      editor.value = newSrc;
+      commitSnap();
+      saveSource(newSrc);
+      syncControls(newSrc);
+      scheduleRender();
+
+      matchList   = [];
+      matchCursor = -1;
+      renderCount();
+      showToast(`Replaced ${count} occurrence${count === 1 ? '' : 's'}`);
     }
 
     function openFindBar() {
@@ -1100,46 +1263,29 @@ cache -> db: Sync
 
     function closeFindBar() {
       findBar.classList.add('hidden');
+      matchCursor = -1;
       editor.focus();
     }
 
     document.getElementById('btn-find-open').addEventListener('click', openFindBar);
     document.getElementById('btn-find-close').addEventListener('click', closeFindBar);
+    btnFindPrev.addEventListener('click', prevMatch);
+    btnFindNext.addEventListener('click', nextMatch);
+    document.getElementById('btn-replace-one').addEventListener('click', replaceCurrent);
+    document.getElementById('btn-replace-all').addEventListener('click', replaceAll);
 
     findInput.addEventListener('input', updateFindCount);
     findCaseEl.addEventListener('change', updateFindCount);
     findRegexEl.addEventListener('change', updateFindCount);
 
+    // Keyboard shortcuts within the find bar
     findInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { document.getElementById('btn-replace-all').click(); }
-      if (e.key === 'Escape') { closeFindBar(); }
+      if (e.key === 'Enter') { e.preventDefault(); e.shiftKey ? prevMatch() : nextMatch(); }
+      if (e.key === 'Escape') closeFindBar();
     });
     replaceInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { document.getElementById('btn-replace-all').click(); }
-      if (e.key === 'Escape') { closeFindBar(); }
-    });
-
-    document.getElementById('btn-replace-all').addEventListener('click', () => {
-      const q = findInput.value;
-      if (!q) return;
-      let regex;
-      try { regex = buildFindRegex(q); } catch { showToast('Invalid regex pattern'); return; }
-
-      const source  = editor.value;
-      const matches = (source.match(regex) || []).length;
-      if (matches === 0) { showToast('No matches found'); return; }
-
-      pushUndo();
-      const newSource = source.replace(regex, replaceInput.value);
-      editor.value = newSource;
-      commitSnap();
-      saveSource(newSource);
-      syncControls(newSource);
-      scheduleRender();
-
-      // Rebuild count after replacement
-      findInput.dispatchEvent(new Event('input'));
-      showToast(`Replaced ${matches} occurrence${matches === 1 ? '' : 's'}`);
+      if (e.key === 'Enter') { e.preventDefault(); replaceCurrent(); }
+      if (e.key === 'Escape') closeFindBar();
     });
 
     // ─── Editor events ────────────────────────────────────────────────────────
@@ -1150,7 +1296,8 @@ cache -> db: Sync
       syncControls(source);
       scheduleSnap();
       scheduleRender();
-      updateFindCount();
+      // Rebuild matches when source changes (positions may have shifted)
+      if (!findBar.classList.contains('hidden')) updateFindCount();
     });
 
     editor.addEventListener('keydown', e => {
