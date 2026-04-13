@@ -2287,11 +2287,16 @@ cache -> db: Sync
         const fileData = await ghFetch(`/repos/${owner}/${repo}/contents/${path}`);
         const content  = decodeURIComponent(escape(atob(fileData.content.replace(/\s/g, ''))));
 
+        // Ensure a config block is always present (defaults layout-engine to elk
+        // if none was specified, matching the dropdown default).
+        const cfg            = parseD2Config(content);
+        const contentWithCfg = applyConfig(content, cfg.layoutEngine, cfg.sketch);
+
         pushUndo();
-        editor.value = content;
+        editor.value = contentWithCfg;
         commitSnap();
-        saveSource(content);
-        syncControls(content);
+        saveSource(contentWithCfg);
+        syncControls(contentWithCfg);
         scheduleRender();
 
         ghSaveContext({ owner, repo, path, sha: fileData.sha, branch: defaultBranch });
