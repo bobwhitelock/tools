@@ -765,30 +765,6 @@
       word-break: break-all;
     }
 
-    /* Device code display */
-    .gh-device-code {
-      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-      font-size: 26px;
-      font-weight: 700;
-      letter-spacing: 4px;
-      text-align: center;
-      padding: 16px;
-      background: var(--bg);
-      border-radius: 10px;
-      border: 1.5px solid var(--border);
-      color: var(--accent);
-      user-select: all;
-    }
-
-    .gh-auth-link {
-      display: block;
-      text-align: center;
-      font-size: 14px;
-      color: var(--accent);
-      text-decoration: none;
-      font-weight: 600;
-    }
-
     /* Checkbox option row */
     .modal-check-row {
       display: flex;
@@ -1021,16 +997,21 @@
     </div>
   </div>
 
-  <!-- GitHub auth modal (Device Flow) -->
+  <!-- GitHub auth modal (Personal Access Token) -->
   <div class="modal-overlay hidden" id="modal-gh-auth">
     <div class="modal-sheet">
       <div class="modal-title">Connect to GitHub</div>
-      <div class="modal-desc" id="gh-auth-desc">Open the URL below and enter the code to authorise.</div>
-      <div class="gh-device-code" id="gh-device-code">------</div>
-      <a class="gh-auth-link" id="gh-auth-link" href="https://github.com/login/device" target="_blank" rel="noopener">
-        Open github.com/login/device →
-      </a>
-      <div class="modal-desc" id="gh-auth-status">Waiting for authorisation…</div>
+      <div class="modal-desc">
+        Create a token at
+        <a href="https://github.com/settings/tokens/new?scopes=repo&description=D2+Editor" target="_blank" rel="noopener" style="color:var(--accent)">github.com/settings/tokens</a>
+        with <strong>repo</strong> scope, then paste it below.
+      </div>
+      <input class="modal-input" id="gh-pat-input" type="password"
+        placeholder="ghp_…" autocomplete="off" spellcheck="false" autocorrect="off" />
+      <button class="modal-btn modal-btn-accent" id="btn-gh-pat-confirm">
+        Connect
+        <span class="modal-btn-sub">Token is stored locally in your browser</span>
+      </button>
       <button class="modal-btn modal-cancel" id="btn-gh-auth-cancel">Cancel</button>
     </div>
   </div>
@@ -1118,7 +1099,6 @@ cache -> db: Sync
 
     // ─── GitHub state ─────────────────────────────────────────────────────────
 
-    const GH_CLIENT_ID  = 'Ov23liKS1rqlQX8Gfak9';
     const GH_LS_TOKEN   = 'gh-token';
     const GH_LS_CONTEXT = 'gh-file-context';
 
@@ -1922,93 +1902,63 @@ cache -> db: Sync
       try { localStorage.setItem(GH_LS_CONTEXT, JSON.stringify(ctx)); } catch (_) {}
     }
 
-    // ─── GitHub: Device Flow auth ─────────────────────────────────────────────
+    // ─── GitHub: PAT auth ─────────────────────────────────────────────────────
 
-    async function ghStartDeviceFlow() {
-      const res = await fetch('https://github.com/login/device/code', {
-        method: 'POST',
-        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ client_id: GH_CLIENT_ID, scope: 'repo' }),
-      });
-      if (!res.ok) throw new Error('Failed to start device flow');
-      return res.json();
-    }
-
-    async function ghPollDeviceFlow(deviceCode) {
-      const res = await fetch('https://github.com/login/oauth/access_token', {
-        method: 'POST',
-        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          client_id: GH_CLIENT_ID,
-          device_code: deviceCode,
-          grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-        }),
-      });
-      return res.json();
-    }
-
-    /** Opens the auth modal, runs Device Flow, resolves with access token or rejects. */
+    /** Opens the PAT input modal, resolves with the token or rejects on cancel. */
     function ghAuthenticate() {
-      return new Promise(async (resolve, reject) => {
+      return new Promise((resolve, reject) => {
         const authModal  = document.getElementById('modal-gh-auth');
-        const codeEl     = document.getElementById('gh-device-code');
-        const statusEl   = document.getElementById('gh-auth-status');
+        const patInput   = document.getElementById('gh-pat-input');
+        const confirmBtn = document.getElementById('btn-gh-pat-confirm');
         const cancelBtn  = document.getElementById('btn-gh-auth-cancel');
 
-        let cancelled  = false;
-        let pollHandle = null;
-
         function cleanup() {
-          clearInterval(pollHandle);
           authModal.classList.add('hidden');
+          confirmBtn.removeEventListener('click', onConfirm);
           cancelBtn.removeEventListener('click', onCancel);
           authModal.removeEventListener('click', onBackdrop);
+          patInput.removeEventListener('keydown', onKey);
         }
-        function onCancel() { cancelled = true; cleanup(); reject(new Error('Cancelled')); }
+        function onCancel() { cleanup(); reject(new Error('Cancelled')); }
         function onBackdrop(e) { if (e.target === authModal) onCancel(); }
+        async function onConfirm() {
+          const token = patInput.value.trim();
+          if (!token) { patInput.focus(); return; }
+          confirmBtn.disabled = true;
+          confirmBtn.childNodes[0].textContent = 'Verifying…';
+          const prev = ghToken;
+          ghToken = token;
+          try {
+            await ghFetch('/user');
+            cleanup();
+            ghSaveToken(token);
+            resolve(token);
+          } catch {
+            ghToken = prev;
+            confirmBtn.disabled = false;
+            confirmBtn.childNodes[0].textContent = 'Connect';
+            patInput.style.borderColor = 'var(--danger)';
+            showToast('Token invalid or missing repo scope');
+          }
+        }
+        function onKey(e) { if (e.key === 'Enter') onConfirm(); }
 
+        patInput.value = '';
+        patInput.style.borderColor = '';
+        confirmBtn.disabled = false;
+        confirmBtn.childNodes[0].textContent = 'Connect';
+        authModal.classList.remove('hidden');
+
+        confirmBtn.addEventListener('click', onConfirm);
         cancelBtn.addEventListener('click', onCancel);
         authModal.addEventListener('click', onBackdrop);
-        authModal.classList.remove('hidden');
-        codeEl.textContent = '------';
-        statusEl.textContent = 'Starting…';
+        patInput.addEventListener('keydown', onKey);
 
-        try {
-          const flow = await ghStartDeviceFlow();
-          codeEl.textContent = flow.user_code;
-          document.getElementById('gh-auth-link').href = flow.verification_uri;
-          document.getElementById('gh-auth-desc').textContent =
-            `Go to ${flow.verification_uri} and enter this code:`;
-          statusEl.textContent = 'Waiting for authorisation…';
-
-          let pollInterval = (flow.interval || 5) * 1000;
-
-          pollHandle = setInterval(async () => {
-            if (cancelled) return;
-            try {
-              const result = await ghPollDeviceFlow(flow.device_code);
-              if (result.access_token) {
-                cleanup();
-                ghSaveToken(result.access_token);
-                resolve(result.access_token);
-              } else if (result.error === 'slow_down') {
-                pollInterval += 5000;
-              } else if (result.error === 'expired_token') {
-                cleanup();
-                reject(new Error('Code expired — please try again'));
-              }
-              // 'authorization_pending' → keep polling
-            } catch (_) { /* network error, keep polling */ }
-          }, pollInterval);
-
-        } catch (err) {
-          cleanup();
-          reject(err);
-        }
+        setTimeout(() => patInput.focus(), 50);
       });
     }
 
-    /** Ensures a valid token. Validates existing token or triggers auth flow. */
+    /** Ensures a valid token. Validates existing token or triggers PAT auth. */
     async function ghEnsureAuth() {
       if (ghToken) {
         try { await ghFetch('/user'); return ghToken; } catch { ghClearToken(); }
