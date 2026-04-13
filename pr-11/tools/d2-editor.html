@@ -209,6 +209,108 @@
       font-weight: 600;
     }
 
+    /* ── Find & Replace bar ───────────────────── */
+    .find-bar {
+      flex-shrink: 0;
+      background: #181825;
+      border-bottom: 1px solid #313244;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .find-bar.hidden { display: none; }
+
+    .find-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .find-input {
+      flex: 1;
+      height: 36px;
+      border: 1px solid #45475a;
+      border-radius: 8px;
+      padding: 0 10px;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      font-size: 14px;
+      outline: none;
+      min-width: 0;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    }
+
+    .find-input:focus { border-color: #7f7fd5; }
+    .find-input::placeholder { color: #6c7086; }
+
+    .find-count {
+      font-size: 12px;
+      color: #6c7086;
+      white-space: nowrap;
+      flex-shrink: 0;
+      min-width: 72px;
+      text-align: right;
+    }
+
+    .find-count.has-match { color: #a6adc8; }
+    .find-count.no-match  { color: #f38ba8; }
+
+    .find-replace-btn {
+      flex-shrink: 0;
+      height: 36px;
+      padding: 0 14px;
+      border: 1px solid #45475a;
+      border-radius: 8px;
+      background: var(--accent);
+      color: white;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .find-replace-btn:active { background: var(--accent-dk); }
+
+    .find-close-btn {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      border: 1px solid #45475a;
+      border-radius: 8px;
+      background: transparent;
+      color: #6c7086;
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .find-close-btn:active { background: #313244; }
+
+    .find-options {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .find-opt-label {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      color: #a6adc8;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .find-opt-label input[type=checkbox] { accent-color: var(--accent); }
+
     #editor {
       flex: 1;
       width: 100%;
@@ -543,6 +645,12 @@
     <!-- Editor -->
     <div id="panel-editor" class="panel active">
       <div class="editor-toolbar">
+        <button class="editor-toolbar-btn" id="btn-find-open">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          Find &amp; Replace
+        </button>
         <button class="editor-toolbar-btn" id="btn-open-reset">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>
@@ -550,6 +658,30 @@
           Reset
         </button>
       </div>
+
+      <!-- Find & Replace bar -->
+      <div class="find-bar hidden" id="find-bar">
+        <div class="find-row">
+          <input id="find-input" class="find-input" placeholder="Find…" type="search"
+            autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
+          <span class="find-count" id="find-count"></span>
+        </div>
+        <div class="find-row">
+          <input id="replace-input" class="find-input" placeholder="Replace with…" type="text"
+            autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
+          <button class="find-replace-btn" id="btn-replace-all">Replace all</button>
+          <button class="find-close-btn" id="btn-find-close" title="Close (Esc)">×</button>
+        </div>
+        <div class="find-options">
+          <label class="find-opt-label">
+            <input type="checkbox" id="find-case" /> Case sensitive
+          </label>
+          <label class="find-opt-label">
+            <input type="checkbox" id="find-regex" /> Regex
+          </label>
+        </div>
+      </div>
+
       <textarea id="editor"
         spellcheck="false"
         autocorrect="off"
@@ -863,38 +995,215 @@ cache -> db: Sync
 
     tabBtns.forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
 
+    // ─── Controls sync helper ─────────────────────────────────────────────────
+
+    function syncControls(source) {
+      const cfg = parseD2Config(source);
+      layoutSelect.value   = cfg.layoutEngine === 'tala' ? 'elk' : cfg.layoutEngine;
+      sketchToggle.checked = cfg.sketch;
+    }
+
+    // ─── Undo / Redo ──────────────────────────────────────────────────────────
+
+    const MAX_UNDO  = 200;
+    const undoStack = [];   // past states (strings) we can undo back to
+    const redoStack = [];   // future states available after undo
+    let   snapValue = '';   // the last value committed to the undo stack
+    let   snapTimer = null;
+
+    /** Push the current editor value onto the undo stack (before a programmatic change). */
+    function pushUndo() {
+      undoStack.push(editor.value);
+      if (undoStack.length > MAX_UNDO) undoStack.shift();
+      redoStack.length = 0;
+      snapValue = editor.value;
+    }
+
+    /** After a programmatic change, mark the new value as the baseline (no double-snap). */
+    function commitSnap() {
+      clearTimeout(snapTimer);
+      snapValue = editor.value;
+    }
+
+    /** Schedule a periodic snapshot while the user is typing. */
+    function scheduleSnap() {
+      clearTimeout(snapTimer);
+      snapTimer = setTimeout(() => {
+        const v = editor.value;
+        if (v !== snapValue) {
+          undoStack.push(snapValue);
+          if (undoStack.length > MAX_UNDO) undoStack.shift();
+          redoStack.length = 0;
+          snapValue = v;
+        }
+      }, 400);
+    }
+
+    /** Restore editor to a value, updating all dependant state. */
+    function restoreValue(v) {
+      editor.value = v;
+      snapValue    = v;
+      clearTimeout(snapTimer);
+      saveSource(v);
+      syncControls(v);
+      scheduleRender();
+    }
+
+    function doUndo() {
+      if (!undoStack.length) return;
+      redoStack.push(editor.value);
+      restoreValue(undoStack.pop());
+    }
+
+    function doRedo() {
+      if (!redoStack.length) return;
+      undoStack.push(editor.value);
+      if (undoStack.length > MAX_UNDO) undoStack.shift();
+      restoreValue(redoStack.pop());
+    }
+
+    // ─── Find & Replace ───────────────────────────────────────────────────────
+
+    const findBar      = document.getElementById('find-bar');
+    const findInput    = document.getElementById('find-input');
+    const replaceInput = document.getElementById('replace-input');
+    const findCountEl  = document.getElementById('find-count');
+    const findCaseEl   = document.getElementById('find-case');
+    const findRegexEl  = document.getElementById('find-regex');
+
+    function buildFindRegex(q) {
+      const flags = findCaseEl.checked ? 'g' : 'gi';
+      if (findRegexEl.checked) return new RegExp(q, flags);
+      return new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags);
+    }
+
+    function updateFindCount() {
+      const q = findInput.value;
+      if (!q) { findCountEl.textContent = ''; findCountEl.className = 'find-count'; return; }
+      try {
+        const m = editor.value.match(buildFindRegex(q));
+        const n = m ? m.length : 0;
+        findCountEl.textContent = n === 0 ? 'No matches' : `${n} match${n === 1 ? '' : 'es'}`;
+        findCountEl.className   = 'find-count ' + (n === 0 ? 'no-match' : 'has-match');
+      } catch {
+        findCountEl.textContent = 'Bad pattern';
+        findCountEl.className   = 'find-count no-match';
+      }
+    }
+
+    function openFindBar() {
+      findBar.classList.remove('hidden');
+      findInput.focus();
+      findInput.select();
+      updateFindCount();
+    }
+
+    function closeFindBar() {
+      findBar.classList.add('hidden');
+      editor.focus();
+    }
+
+    document.getElementById('btn-find-open').addEventListener('click', openFindBar);
+    document.getElementById('btn-find-close').addEventListener('click', closeFindBar);
+
+    findInput.addEventListener('input', updateFindCount);
+    findCaseEl.addEventListener('change', updateFindCount);
+    findRegexEl.addEventListener('change', updateFindCount);
+
+    findInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { document.getElementById('btn-replace-all').click(); }
+      if (e.key === 'Escape') { closeFindBar(); }
+    });
+    replaceInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { document.getElementById('btn-replace-all').click(); }
+      if (e.key === 'Escape') { closeFindBar(); }
+    });
+
+    document.getElementById('btn-replace-all').addEventListener('click', () => {
+      const q = findInput.value;
+      if (!q) return;
+      let regex;
+      try { regex = buildFindRegex(q); } catch { showToast('Invalid regex pattern'); return; }
+
+      const source  = editor.value;
+      const matches = (source.match(regex) || []).length;
+      if (matches === 0) { showToast('No matches found'); return; }
+
+      pushUndo();
+      const newSource = source.replace(regex, replaceInput.value);
+      editor.value = newSource;
+      commitSnap();
+      saveSource(newSource);
+      syncControls(newSource);
+      scheduleRender();
+
+      // Rebuild count after replacement
+      findInput.dispatchEvent(new Event('input'));
+      showToast(`Replaced ${matches} occurrence${matches === 1 ? '' : 's'}`);
+    });
+
     // ─── Editor events ────────────────────────────────────────────────────────
 
     editor.addEventListener('input', () => {
       const source = editor.value;
       saveSource(source);
-
-      // Sync controls to whatever the user typed
-      // (TALA is not available in browser; fall back to ELK)
-      const cfg = parseD2Config(source);
-      layoutSelect.value   = cfg.layoutEngine === 'tala' ? 'elk' : cfg.layoutEngine;
-      sketchToggle.checked = cfg.sketch;
-
+      syncControls(source);
+      scheduleSnap();
       scheduleRender();
+      updateFindCount();
     });
 
-    // Support Tab key for indentation
     editor.addEventListener('keydown', e => {
+      const mod = e.ctrlKey || e.metaKey;
+
+      // Tab → indent with 2 spaces
       if (e.key === 'Tab') {
         e.preventDefault();
+        pushUndo();
         const s = editor.selectionStart;
-        const v = editor.value;
-        editor.value = v.slice(0, s) + '  ' + v.slice(editor.selectionEnd);
+        editor.value = editor.value.slice(0, s) + '  ' + editor.value.slice(editor.selectionEnd);
         editor.selectionStart = editor.selectionEnd = s + 2;
-        editor.dispatchEvent(new Event('input'));
+        commitSnap();
+        saveSource(editor.value);
+        syncControls(editor.value);
+        scheduleRender();
+        return;
+      }
+
+      // Ctrl/Cmd+Z → undo
+      if (mod && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        doUndo();
+        return;
+      }
+
+      // Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y → redo
+      if (mod && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        doRedo();
+        return;
+      }
+
+      // Ctrl/Cmd+F or Ctrl/Cmd+H → find & replace
+      if (mod && (e.key === 'f' || e.key === 'h')) {
+        e.preventDefault();
+        openFindBar();
+        return;
+      }
+
+      // Escape → close find bar
+      if (e.key === 'Escape') {
+        closeFindBar();
       }
     });
 
     // ─── Layout / Sketch controls ─────────────────────────────────────────────
 
     function applyAndRender() {
+      pushUndo();
       const newSource = applyConfig(editor.value, layoutSelect.value, sketchToggle.checked);
       editor.value = newSource;
+      commitSnap();
       saveSource(newSource);
       scheduleRender();
     }
@@ -1016,13 +1325,12 @@ cache -> db: Sync
 
     function applyReset(source, toastMsg) {
       closeResetModal();
-      try { localStorage.removeItem(LS_KEY); } catch (_) {}
+      pushUndo();
       editor.value             = source;
+      commitSnap();
       currentSvg               = '';
       previewContent.innerHTML = '';
-      const cfg = parseD2Config(source);
-      layoutSelect.value   = cfg.layoutEngine === 'tala' ? 'elk' : cfg.layoutEngine;
-      sketchToggle.checked = cfg.sketch;
+      syncControls(source);
       saveSource(source);
       showToast(toastMsg);
       scheduleRender();
@@ -1045,11 +1353,9 @@ cache -> db: Sync
       // Restore source
       const source = loadSource();
       editor.value = source;
+      snapValue    = source;  // seed the undo baseline
 
-      // Sync controls (TALA unavailable in browser → fall back to ELK)
-      const cfg = parseD2Config(source);
-      layoutSelect.value   = cfg.layoutEngine === 'tala' ? 'elk' : cfg.layoutEngine;
-      sketchToggle.checked = cfg.sketch;
+      syncControls(source);
 
       // Load D2 WASM
       setStatus('loading', 'Loading D2…');
