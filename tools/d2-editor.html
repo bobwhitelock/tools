@@ -1326,6 +1326,19 @@ cache -> db: Sync
     function switchTab(name) {
       tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === name));
       panels.forEach(p => p.classList.toggle('active', p.id === `panel-${name}`));
+      // Ensure the config block is in the source whenever the user leaves the editor,
+      // so the layout engine in use always matches the dropdown (defaults to ELK).
+      if (name === 'preview' || name === 'manage') {
+        const source  = editor.value;
+        const cfg     = parseD2Config(source);
+        const withCfg = applyConfig(source, cfg.layoutEngine, cfg.sketch);
+        if (withCfg !== source) {
+          editor.value = withCfg;
+          saveSource(withCfg);
+          syncControls(withCfg);
+          scheduleRender();
+        }
+      }
     }
 
     tabBtns.forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
@@ -1674,22 +1687,6 @@ cache -> db: Sync
       if (!findBar.classList.contains('hidden')) updateFindCount();
     });
 
-    // After a paste, ensure the config block is present (adds ELK if not specified).
-    editor.addEventListener('paste', () => {
-      requestAnimationFrame(() => {
-        const source  = editor.value;
-        const cfg     = parseD2Config(source);
-        const withCfg = applyConfig(source, cfg.layoutEngine, cfg.sketch);
-        if (withCfg === source) return;
-        const cursorAfter = editor.selectionStart + (withCfg.length - source.length);
-        editor.value = withCfg;
-        editor.selectionStart = editor.selectionEnd = Math.max(0, cursorAfter);
-        saveSource(withCfg);
-        syncControls(withCfg);
-        scheduleRender();
-      });
-    });
-
     editor.addEventListener('keydown', e => {
       const mod = e.ctrlKey || e.metaKey;
 
@@ -1863,14 +1860,12 @@ cache -> db: Sync
     function applyReset(source, toastMsg) {
       closeResetModal();
       pushUndo();
-      const cfg        = parseD2Config(source);
-      const withCfg    = applyConfig(source, cfg.layoutEngine, cfg.sketch);
-      editor.value             = withCfg;
+      editor.value             = source;
       commitSnap();
       currentSvg               = '';
       previewContent.innerHTML = '';
-      syncControls(withCfg);
-      saveSource(withCfg);
+      syncControls(source);
+      saveSource(source);
       showToast(toastMsg);
       scheduleRender();
     }
@@ -2305,16 +2300,11 @@ cache -> db: Sync
         const fileData = await ghFetch(`/repos/${owner}/${repo}/contents/${path}`);
         const content  = decodeURIComponent(escape(atob(fileData.content.replace(/\s/g, ''))));
 
-        // Ensure a config block is always present (defaults layout-engine to elk
-        // if none was specified, matching the dropdown default).
-        const cfg            = parseD2Config(content);
-        const contentWithCfg = applyConfig(content, cfg.layoutEngine, cfg.sketch);
-
         pushUndo();
-        editor.value = contentWithCfg;
+        editor.value = content;
         commitSnap();
-        saveSource(contentWithCfg);
-        syncControls(contentWithCfg);
+        saveSource(content);
+        syncControls(content);
         scheduleRender();
 
         ghSaveContext({ owner, repo, path, sha: fileData.sha, branch: defaultBranch });
