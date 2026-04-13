@@ -1,0 +1,1699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>D2 Editor</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #f4f5f7;
+      --surface:     #ffffff;
+      --text:        #1a1a1a;
+      --muted:       #6b7280;
+      --border:      #e3e3e3;
+      --accent:      #5b5bd6;
+      --accent-dk:   #4646b0;
+      --danger:      #dc2626;
+      --danger-bg:   #fef2f2;
+      --danger-bdr:  #fecaca;
+      --sh-sm:       0 1px 4px rgba(0,0,0,.08);
+      --tab-h:       58px;
+      --hdr-h:       52px;
+      --safe-b:      env(safe-area-inset-bottom, 0px);
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ───────────────────────────────── */
+    .hdr {
+      height: var(--hdr-h);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      flex-shrink: 0;
+      box-shadow: var(--sh-sm);
+      gap: 10px;
+    }
+
+    .hdr-title {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+
+    .hdr-status {
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .hdr-status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .hdr-status-dot.ready   { background: #16a34a; }
+    .hdr-status-dot.error   { background: var(--danger); }
+    .hdr-status-dot.loading { background: var(--accent); animation: pulse 1s ease-in-out infinite; }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    /* ── Main area ────────────────────────────── */
+    .main {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* ── Panels ───────────────────────────────── */
+    .panel {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+    }
+    .panel.active { display: flex; }
+
+    /* ── Editor panel ─────────────────────────── */
+    #panel-editor { background: #1e1e2e; }
+
+    .editor-toolbar {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 6px 10px;
+      background: #181825;
+      border-bottom: 1px solid #313244;
+    }
+
+    .editor-toolbar-btn {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 11px;
+      border: 1px solid #45475a;
+      border-radius: 7px;
+      background: transparent;
+      color: #a6adc8;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: background .12s, color .12s;
+    }
+
+    .editor-toolbar-btn:active { background: #313244; color: #cdd6f4; }
+    .editor-toolbar-btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+    /* ── Reset modal ──────────────────────────── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.45);
+      z-index: 300;
+      display: flex;
+      align-items: flex-end;
+      animation: fade-in .15s ease;
+    }
+
+    .modal-overlay.hidden { display: none; }
+
+    @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+    .modal-sheet {
+      width: 100%;
+      background: var(--surface);
+      border-radius: 20px 20px 0 0;
+      padding: 20px 16px calc(20px + var(--safe-b));
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      animation: slide-up .2s ease;
+    }
+
+    @keyframes slide-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+    .modal-title {
+      font-size: 16px;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 2px;
+    }
+
+    .modal-desc {
+      font-size: 13px;
+      color: var(--muted);
+      text-align: center;
+      margin-bottom: 4px;
+    }
+
+    .modal-btn {
+      width: 100%;
+      min-height: 56px;
+      border: 1.5px solid var(--border);
+      border-radius: 13px;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      padding: 10px 16px;
+      gap: 2px;
+      transition: background .12s, transform .08s;
+      -webkit-tap-highlight-color: transparent;
+      text-align: left;
+    }
+
+    .modal-btn:active { background: var(--bg); transform: scale(.98); }
+
+    .modal-btn-sub {
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--muted);
+    }
+
+    .modal-btn-danger { background: var(--danger-bg); border-color: var(--danger-bdr); color: var(--danger); }
+    .modal-btn-danger .modal-btn-sub { color: #f87171; }
+    .modal-btn-danger:active { background: #fee2e2; }
+
+    .modal-cancel {
+      margin-top: 2px;
+      background: var(--bg);
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    /* ── Find & Replace bar ───────────────────── */
+    .find-bar {
+      flex-shrink: 0;
+      background: #181825;
+      border-bottom: 1px solid #313244;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .find-bar.hidden { display: none; }
+
+    .find-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .find-input {
+      flex: 1;
+      height: 36px;
+      border: 1px solid #45475a;
+      border-radius: 8px;
+      padding: 0 10px;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      font-size: 14px;
+      outline: none;
+      min-width: 0;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    }
+
+    .find-input:focus { border-color: #7f7fd5; }
+    .find-input::placeholder { color: #6c7086; }
+
+    .find-count {
+      font-size: 12px;
+      color: #6c7086;
+      white-space: nowrap;
+      flex-shrink: 0;
+      min-width: 72px;
+      text-align: right;
+    }
+
+    .find-count.has-match { color: #a6adc8; }
+    .find-count.no-match  { color: #f38ba8; }
+
+    .find-replace-btn {
+      flex-shrink: 0;
+      height: 36px;
+      padding: 0 14px;
+      border: 1px solid #45475a;
+      border-radius: 8px;
+      background: var(--accent);
+      color: white;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .find-replace-btn:active { background: var(--accent-dk); }
+
+    .find-nav-btn {
+      flex-shrink: 0;
+      width: 34px;
+      height: 36px;
+      border: 1px solid #45475a;
+      border-radius: 8px;
+      background: transparent;
+      color: #a6adc8;
+      font-size: 15px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .find-nav-btn:active { background: #313244; }
+    .find-nav-btn:disabled { opacity: .35; cursor: default; }
+
+    .find-close-btn {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      border: 1px solid #45475a;
+      border-radius: 8px;
+      background: transparent;
+      color: #6c7086;
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .find-close-btn:active { background: #313244; }
+
+    .find-replace-one {
+      background: #313244;
+      color: #cdd6f4;
+    }
+
+    .find-replace-one:active { background: #45475a; }
+
+    .find-options {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .find-opt-label {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      color: #a6adc8;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .find-opt-label input[type=checkbox] { accent-color: var(--accent); }
+
+    .editor-wrap {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    #editor {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      resize: none;
+      border: none;
+      outline: none;
+      padding: 16px;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+      font-size: 14px;
+      line-height: 1.65;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      tab-size: 2;
+      caret-color: #cba6f7;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Mirror: invisible clone used to measure text positions for the highlight overlay */
+    #editor-mirror {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      visibility: hidden;
+      pointer-events: none;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: break-word;
+      overflow: visible;
+      padding: 16px;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+      font-size: 14px;
+      line-height: 1.65;
+      tab-size: 2;
+      box-sizing: border-box;
+      color: transparent;
+    }
+
+    /* Highlight overlay — drawn on top of textarea, pointer-events:none so it doesn't block input */
+    #editor-hl {
+      position: absolute;
+      display: none;
+      pointer-events: none;
+      background: rgba(250, 189, 47, 0.45);
+      border-radius: 2px;
+      z-index: 1;
+    }
+
+    #editor::selection { background: #45475a; }
+
+    /* ── Preview panel ────────────────────────── */
+    #panel-preview { background: var(--bg); }
+
+    .preview-controls {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+
+    .ctrl-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .4px;
+      white-space: nowrap;
+    }
+
+    .ctrl-select {
+      flex: 1;
+      min-width: 90px;
+      height: 36px;
+      border: 1.5px solid var(--border);
+      border-radius: 9px;
+      padding: 0 10px;
+      font-size: 14px;
+      font-weight: 500;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+      padding-right: 30px;
+      cursor: pointer;
+    }
+
+    .ctrl-divider {
+      width: 1px;
+      height: 24px;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+
+    /* Toggle switch */
+    .toggle-wrap {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      white-space: nowrap;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .toggle-wrap .ctrl-label { cursor: pointer; }
+
+    .toggle {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+
+    .toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+      position: absolute;
+    }
+
+    .toggle-track {
+      position: absolute;
+      inset: 0;
+      background: var(--border);
+      border-radius: 12px;
+      transition: background .2s;
+      cursor: pointer;
+    }
+
+    .toggle input:checked + .toggle-track { background: var(--accent); }
+
+    .toggle-track::after {
+      content: '';
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 18px;
+      height: 18px;
+      background: white;
+      border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0,0,0,.2);
+      transition: transform .2s;
+    }
+
+    .toggle input:checked + .toggle-track::after { transform: translateX(20px); }
+
+    /* Preview area */
+    .preview-area {
+      flex: 1;
+      overflow: auto;
+      position: relative;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .preview-area svg {
+      max-width: 100%;
+      height: auto;
+      border-radius: 10px;
+      background: white;
+    }
+
+    .preview-empty {
+      margin-top: 60px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    .preview-error {
+      width: 100%;
+      background: var(--danger-bg);
+      border: 1px solid var(--danger-bdr);
+      border-radius: 10px;
+      padding: 14px 16px;
+      font-size: 13px;
+      color: var(--danger);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.5;
+    }
+
+    /* Spinner overlay */
+    .spin-wrap {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: rgba(244,245,247,.85);
+      backdrop-filter: blur(2px);
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .spin-wrap.hidden { display: none; }
+
+    .spinner {
+      width: 34px;
+      height: 34px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .spin-text {
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    /* ── Manage panel ─────────────────────────── */
+    #panel-manage {
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 20px 16px 24px;
+      gap: 0;
+    }
+
+    .section {
+      margin-bottom: 28px;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: var(--muted);
+      margin-bottom: 10px;
+      padding-left: 2px;
+    }
+
+    .btn-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+
+    .btn {
+      width: 100%;
+      min-height: 52px;
+      border: 1.5px solid var(--border);
+      border-radius: 13px;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 12px;
+      transition: background .12s, border-color .12s, transform .08s;
+      -webkit-tap-highlight-color: transparent;
+      text-align: left;
+    }
+
+    .btn:active { background: var(--bg); transform: scale(.98); }
+
+    .btn-icon {
+      width: 22px;
+      height: 22px;
+      flex-shrink: 0;
+      color: var(--muted);
+    }
+
+    .btn-danger {
+      background: var(--danger-bg);
+      border-color: var(--danger-bdr);
+      color: var(--danger);
+    }
+
+    .btn-danger .btn-icon { color: var(--danger); }
+    .btn-danger:active { background: #fee2e2; }
+
+    /* ── Tab bar ──────────────────────────────── */
+    .tab-bar {
+      height: calc(var(--tab-h) + var(--safe-b));
+      padding-bottom: var(--safe-b);
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-shrink: 0;
+    }
+
+    .tab-btn {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .4px;
+      text-transform: uppercase;
+      -webkit-tap-highlight-color: transparent;
+      transition: color .15s;
+    }
+
+    .tab-btn svg { width: 23px; height: 23px; }
+    .tab-btn.active { color: var(--accent); }
+
+    /* ── Toast ────────────────────────────────── */
+    .toast {
+      position: fixed;
+      bottom: calc(var(--tab-h) + var(--safe-b) + 14px);
+      left: 50%;
+      transform: translateX(-50%) translateY(6px);
+      background: #1a1a2e;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 500;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .2s, transform .2s;
+      z-index: 500;
+      white-space: nowrap;
+      box-shadow: 0 4px 20px rgba(0,0,0,.25);
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="hdr">
+    <span class="hdr-title">D2 Editor</span>
+    <span class="hdr-status">
+      <span class="hdr-status-dot loading" id="status-dot"></span>
+      <span id="status-text">Loading…</span>
+    </span>
+  </header>
+
+  <!-- Main panels -->
+  <main class="main">
+
+    <!-- Editor -->
+    <div id="panel-editor" class="panel active">
+      <div class="editor-toolbar">
+        <button class="editor-toolbar-btn" id="btn-find-open">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          Find &amp; Replace
+        </button>
+        <button class="editor-toolbar-btn" id="btn-open-reset">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>
+          </svg>
+          Reset
+        </button>
+      </div>
+
+      <!-- Find & Replace bar -->
+      <div class="find-bar hidden" id="find-bar">
+        <div class="find-row">
+          <input id="find-input" class="find-input" placeholder="Find…" type="search"
+            autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
+          <button class="find-nav-btn" id="btn-find-prev" title="Previous match (Shift+Enter)" disabled>↑</button>
+          <button class="find-nav-btn" id="btn-find-next" title="Next match (Enter)" disabled>↓</button>
+          <span class="find-count" id="find-count"></span>
+          <button class="find-close-btn" id="btn-find-close" title="Close (Esc)">×</button>
+        </div>
+        <div class="find-row">
+          <input id="replace-input" class="find-input" placeholder="Replace with…" type="text"
+            autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
+          <button class="find-replace-btn find-replace-one" id="btn-replace-one">Replace</button>
+          <button class="find-replace-btn" id="btn-replace-all">All</button>
+        </div>
+        <div class="find-options">
+          <label class="find-opt-label">
+            <input type="checkbox" id="find-case" /> Case insensitive
+          </label>
+          <label class="find-opt-label">
+            <input type="checkbox" id="find-regex" /> Regex
+          </label>
+        </div>
+      </div>
+
+      <div class="editor-wrap">
+        <textarea id="editor"
+          spellcheck="false"
+          autocorrect="off"
+          autocapitalize="off"
+          autocomplete="off"
+        ></textarea>
+        <!-- Mirror + overlay for match highlighting independent of focus state -->
+        <div id="editor-mirror" aria-hidden="true"></div>
+        <div id="editor-hl" aria-hidden="true"></div>
+      </div>
+    </div>
+
+    <!-- Preview -->
+    <div id="panel-preview" class="panel">
+      <div class="preview-controls">
+        <span class="ctrl-label">Layout</span>
+        <select id="layout-select" class="ctrl-select" title="Layout engine">
+          <option value="dagre">Dagre</option>
+          <option value="elk">ELK</option>
+          <option value="tala" disabled>TALA (unavailable in browser)</option>
+        </select>
+        <div class="ctrl-divider"></div>
+        <label class="toggle-wrap" title="Sketch (hand-drawn) rendering">
+          <span class="ctrl-label">Sketch</span>
+          <span class="toggle">
+            <input type="checkbox" id="sketch-toggle" />
+            <span class="toggle-track"></span>
+          </span>
+        </label>
+      </div>
+      <div class="preview-area" id="preview-area">
+        <div class="spin-wrap" id="spinner">
+          <div class="spinner"></div>
+          <span class="spin-text">Rendering…</span>
+        </div>
+        <div id="preview-content"></div>
+      </div>
+    </div>
+
+    <!-- Manage -->
+    <div id="panel-manage" class="panel">
+      <div class="section">
+        <div class="section-title">Source</div>
+        <div class="btn-stack">
+          <button class="btn" id="btn-download-d2">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Download .d2 file
+          </button>
+          <button class="btn" id="btn-copy">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+            </svg>
+            Copy source to clipboard
+          </button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Diagram</div>
+        <div class="btn-stack">
+          <button class="btn" id="btn-download-svg">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Download SVG
+          </button>
+          <button class="btn" id="btn-download-png">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+            </svg>
+            Download PNG
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Tab bar -->
+  <nav class="tab-bar">
+    <button class="tab-btn active" data-tab="editor">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+      </svg>
+      Editor
+    </button>
+    <button class="tab-btn" data-tab="preview">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+      </svg>
+      Preview
+    </button>
+    <button class="tab-btn" data-tab="manage">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      Export
+    </button>
+  </nav>
+
+  <!-- Reset modal (bottom sheet) -->
+  <div class="modal-overlay hidden" id="modal-reset">
+    <div class="modal-sheet">
+      <div class="modal-title">Reset editor</div>
+      <div class="modal-desc">Choose what to replace the current source with:</div>
+      <button class="modal-btn" id="btn-blank">
+        Clear to blank
+        <span class="modal-btn-sub">Empty diagram — start from scratch</span>
+      </button>
+      <button class="modal-btn modal-btn-danger" id="btn-example">
+        Reset to example
+        <span class="modal-btn-sub">Restore the built-in sample diagram</span>
+      </button>
+      <button class="modal-btn modal-cancel" id="btn-modal-cancel">Cancel</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script type="module">
+    // Uses @terrastruct/d2 — the JavaScript/WASM package for D2 diagrams.
+    // @terrastruct/d2-wasm is the underlying compiled WASM binary; @terrastruct/d2
+    // is the JS wrapper that provides the clean API used here.
+    import { D2 } from 'https://esm.sh/@terrastruct/d2';
+
+    // ─── Constants ────────────────────────────────────────────────────────────
+
+    const LS_KEY       = 'd2-editor-source';
+    const DEBOUNCE_MS  = 700;
+
+    const DEFAULT_SOURCE =
+`vars: {
+  d2-config: {
+    layout-engine: elk
+  }
+}
+
+# Sample diagram — edit me!
+web: Web Browser
+api: API Server {shape: hexagon}
+db: Database {shape: cylinder}
+cache: Cache {shape: cloud}
+
+web -> api: HTTP
+api -> db: Query
+api -> cache: Read/Write
+cache -> db: Sync
+`;
+
+    // ─── State ────────────────────────────────────────────────────────────────
+
+    let d2         = null;   // D2 instance (null until WASM loaded)
+    let currentSvg = '';     // Last successfully rendered SVG string
+    let renderTimer = null;
+    let rendering   = false;
+
+    // ─── DOM refs ─────────────────────────────────────────────────────────────
+
+    const editor        = document.getElementById('editor');
+    const editorMirror  = document.getElementById('editor-mirror');
+    const editorHl      = document.getElementById('editor-hl');
+    const layoutSelect  = document.getElementById('layout-select');
+    const sketchToggle  = document.getElementById('sketch-toggle');
+    const previewContent= document.getElementById('preview-content');
+    const spinnerEl     = document.getElementById('spinner');
+    const statusDot     = document.getElementById('status-dot');
+    const statusText    = document.getElementById('status-text');
+    const toastEl       = document.getElementById('toast');
+
+    // ─── Status indicator ─────────────────────────────────────────────────────
+
+    function setStatus(state, text) {
+      statusDot.className = 'hdr-status-dot ' + state;
+      statusText.textContent = text;
+    }
+
+    // ─── D2 config helpers ────────────────────────────────────────────────────
+
+    /**
+     * Read layout-engine and sketch values from D2 source.
+     */
+    function parseD2Config(source) {
+      const layoutMatch = source.match(/layout-engine:\s*(\w+)/);
+      const sketchMatch = source.match(/sketch:\s*true/);
+      return {
+        layoutEngine: layoutMatch ? layoutMatch[1] : 'elk',
+        sketch:       !!sketchMatch,
+      };
+    }
+
+    /**
+     * Remove the auto-managed vars { d2-config { ... } } block from the top of
+     * the source. Uses brace-counting so it's robust to extra content inside.
+     */
+    function stripConfigBlock(source) {
+      const lines = source.split('\n');
+      let i = 0;
+
+      // Skip any leading blank lines
+      while (i < lines.length && lines[i].trim() === '') i++;
+
+      // Only strip if source starts (after blanks) with `vars:`
+      if (i >= lines.length || !lines[i].trim().startsWith('vars:')) return source;
+
+      const startLine = i;
+      let depth   = 0;
+      let hasD2   = false;
+      let endLine = startLine;
+
+      for (let j = startLine; j < lines.length; j++) {
+        const t = lines[j];
+        for (const ch of t) {
+          if (ch === '{') depth++;
+          else if (ch === '}') depth--;
+        }
+        if (lines[j].trim().startsWith('d2-config')) hasD2 = true;
+        endLine = j;
+        if (j > startLine && depth === 0) break;
+        if (j === startLine && depth === 0) break; // no opening brace
+      }
+
+      // Only strip if this vars block actually contained d2-config
+      if (!hasD2 || depth !== 0) return source;
+
+      const remaining = lines.slice(endLine + 1);
+      // Remove leading blank lines from the remainder
+      while (remaining.length && remaining[0].trim() === '') remaining.shift();
+
+      const before = lines.slice(0, startLine);
+      return [...before, ...remaining].join('\n');
+    }
+
+    /**
+     * Build the vars { d2-config { ... } } block from current settings.
+     */
+    function buildConfigBlock(layoutEngine, sketch) {
+      const inner = [`    layout-engine: ${layoutEngine}`];
+      if (sketch) inner.push('    sketch: true');
+      return `vars: {\n  d2-config: {\n${inner.join('\n')}\n  }\n}\n\n`;
+    }
+
+    /**
+     * Update layout-engine and sketch inside the existing vars { d2-config {} }
+     * block if present, preserving any other keys (e.g. theme-id).
+     * Falls back to prepending a fresh block when none exists.
+     */
+    function applyConfig(source, layoutEngine, sketch) {
+      const lines = source.split('\n');
+      let i = 0;
+      while (i < lines.length && lines[i].trim() === '') i++;
+
+      // No vars block at top — prepend a fresh one
+      if (i >= lines.length || !lines[i].trim().startsWith('vars:')) {
+        return buildConfigBlock(layoutEngine, sketch) + source.trimStart();
+      }
+
+      // Walk to end of the vars block using brace counting
+      let depth = 0, endLine = i, hasD2 = false;
+      for (let j = i; j < lines.length; j++) {
+        for (const ch of lines[j]) {
+          if (ch === '{') depth++;
+          else if (ch === '}') depth--;
+        }
+        if (lines[j].trim().startsWith('d2-config')) hasD2 = true;
+        endLine = j;
+        if (j > i && depth === 0) break;
+        if (j === i && depth === 0) break;
+      }
+
+      // vars block has no d2-config section — prepend fresh block above it
+      if (!hasD2) return buildConfigBlock(layoutEngine, sketch) + source.trimStart();
+
+      const before = lines.slice(0, i);
+      const block  = lines.slice(i, endLine + 1);
+      const after  = lines.slice(endLine + 1);
+
+      let layoutSet = false, sketchSet = false;
+      const newBlock = block.reduce((acc, line) => {
+        const t = line.trim();
+        if (t.startsWith('layout-engine:')) {
+          acc.push(line.replace(/layout-engine:\s*\S+/, `layout-engine: ${layoutEngine}`));
+          layoutSet = true;
+        } else if (t.startsWith('sketch:')) {
+          if (sketch) acc.push(line.replace(/sketch:\s*\S+/, 'sketch: true'));
+          // drop the line entirely when sketch is disabled
+          sketchSet = true;
+        } else {
+          acc.push(line);
+        }
+        return acc;
+      }, []);
+
+      // Insert layout-engine after d2-config opening if it wasn't found
+      if (!layoutSet) {
+        const d2Idx = newBlock.findIndex(l => l.trim().startsWith('d2-config'));
+        if (d2Idx >= 0) {
+          const insertAt = d2Idx + (newBlock[d2Idx].includes('{') ? 1 : 2);
+          newBlock.splice(insertAt, 0, `    layout-engine: ${layoutEngine}`);
+        }
+      }
+
+      // Insert sketch: true after layout-engine if needed
+      if (!sketchSet && sketch) {
+        const lIdx = newBlock.findIndex(l => l.trim().startsWith('layout-engine:'));
+        if (lIdx >= 0) newBlock.splice(lIdx + 1, 0, '    sketch: true');
+      }
+
+      return [...before, ...newBlock, ...after].join('\n');
+    }
+
+    // ─── Rendering ────────────────────────────────────────────────────────────
+
+    function showSpinner(show) {
+      spinnerEl.classList.toggle('hidden', !show);
+    }
+
+    async function doRender(source) {
+      if (!d2) return;
+      rendering = true;
+      showSpinner(true);
+      try {
+        const compiled = await d2.compile(source);
+        const svg = await d2.render(compiled.diagram, compiled.renderOptions);
+        currentSvg = svg;
+        previewContent.innerHTML = svg;
+        // Make SVG responsive
+        const svgEl = previewContent.querySelector('svg');
+        if (svgEl) {
+          svgEl.removeAttribute('width');
+          svgEl.removeAttribute('height');
+          svgEl.style.width  = '100%';
+          svgEl.style.height = 'auto';
+        }
+        setStatus('ready', 'Ready');
+      } catch (err) {
+        const msg = (err && err.message) ? err.message : String(err);
+        previewContent.innerHTML = `<div class="preview-error">${escHtml(msg)}</div>`;
+        setStatus('error', 'Error');
+      } finally {
+        rendering = false;
+        showSpinner(false);
+      }
+    }
+
+    function scheduleRender() {
+      clearTimeout(renderTimer);
+      showSpinner(true);
+      setStatus('loading', 'Rendering…');
+      renderTimer = setTimeout(() => doRender(editor.value), DEBOUNCE_MS);
+    }
+
+    function escHtml(s) {
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    // ─── LocalStorage ─────────────────────────────────────────────────────────
+
+    function loadSource() {
+      return localStorage.getItem(LS_KEY) || DEFAULT_SOURCE;
+    }
+
+    function saveSource(source) {
+      try { localStorage.setItem(LS_KEY, source); } catch (_) {}
+    }
+
+    // ─── Tab switching ────────────────────────────────────────────────────────
+
+    const tabBtns  = document.querySelectorAll('.tab-btn');
+    const panels   = document.querySelectorAll('.panel');
+
+    function switchTab(name) {
+      tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+      panels.forEach(p => p.classList.toggle('active', p.id === `panel-${name}`));
+    }
+
+    tabBtns.forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+
+    // ─── Controls sync helper ─────────────────────────────────────────────────
+
+    function syncControls(source) {
+      const cfg = parseD2Config(source);
+      layoutSelect.value   = cfg.layoutEngine === 'tala' ? 'elk' : cfg.layoutEngine;
+      sketchToggle.checked = cfg.sketch;
+    }
+
+    // ─── Undo / Redo ──────────────────────────────────────────────────────────
+
+    const MAX_UNDO  = 200;
+    const undoStack = [];   // past states (strings) we can undo back to
+    const redoStack = [];   // future states available after undo
+    let   snapValue = '';   // the last value committed to the undo stack
+    let   snapTimer = null;
+
+    /** Push the current editor value onto the undo stack (before a programmatic change). */
+    function pushUndo() {
+      undoStack.push(editor.value);
+      if (undoStack.length > MAX_UNDO) undoStack.shift();
+      redoStack.length = 0;
+      snapValue = editor.value;
+    }
+
+    /** After a programmatic change, mark the new value as the baseline (no double-snap). */
+    function commitSnap() {
+      clearTimeout(snapTimer);
+      snapValue = editor.value;
+    }
+
+    /** Schedule a periodic snapshot while the user is typing. */
+    function scheduleSnap() {
+      clearTimeout(snapTimer);
+      snapTimer = setTimeout(() => {
+        const v = editor.value;
+        if (v !== snapValue) {
+          undoStack.push(snapValue);
+          if (undoStack.length > MAX_UNDO) undoStack.shift();
+          redoStack.length = 0;
+          snapValue = v;
+        }
+      }, 400);
+    }
+
+    /** Restore editor to a value, updating all dependant state. */
+    function restoreValue(v) {
+      editor.value = v;
+      snapValue    = v;
+      clearTimeout(snapTimer);
+      saveSource(v);
+      syncControls(v);
+      scheduleRender();
+    }
+
+    function doUndo() {
+      if (!undoStack.length) return;
+      redoStack.push(editor.value);
+      restoreValue(undoStack.pop());
+    }
+
+    function doRedo() {
+      if (!redoStack.length) return;
+      undoStack.push(editor.value);
+      if (undoStack.length > MAX_UNDO) undoStack.shift();
+      restoreValue(redoStack.pop());
+    }
+
+    // ─── Find & Replace ───────────────────────────────────────────────────────
+
+    const findBar      = document.getElementById('find-bar');
+    const findInput    = document.getElementById('find-input');
+    const replaceInput = document.getElementById('replace-input');
+    const findCountEl  = document.getElementById('find-count');
+    const findCaseEl   = document.getElementById('find-case');
+    const findRegexEl  = document.getElementById('find-regex');
+    const btnFindPrev  = document.getElementById('btn-find-prev');
+    const btnFindNext  = document.getElementById('btn-find-next');
+
+    // ─── Match highlight overlay ──────────────────────────────────────────────
+    // Uses a hidden mirror div to measure text positions, then positions an
+    // overlay div over the textarea. Works regardless of focus state (fixes mobile).
+
+    function showMatchOverlay(m) {
+      const text = editor.value;
+      // Build mirror content: plain text before match, a span for the match, plain text after
+      editorMirror.textContent = '';
+      editorMirror.appendChild(document.createTextNode(text.slice(0, m.start)));
+      const span = document.createElement('span');
+      span.textContent = text.slice(m.start, m.end) || '\u200b'; // zero-width space so empty match has measurable height
+      editorMirror.appendChild(span);
+      editorMirror.appendChild(document.createTextNode(text.slice(m.end)));
+
+      // Offset mirror by editor's scroll position so span lands at the right visual coordinates
+      editorMirror.style.top  = -editor.scrollTop  + 'px';
+      editorMirror.style.left = -editor.scrollLeft + 'px';
+
+      const spanRect = span.getBoundingClientRect();
+      const wrapRect = editor.parentElement.getBoundingClientRect();
+      const top    = spanRect.top  - wrapRect.top;
+      const left   = spanRect.left - wrapRect.left;
+      const width  = spanRect.width;
+      const height = spanRect.height;
+
+      // Hide if match is fully outside the visible area
+      if (top + height < 0 || top > wrapRect.height || left + width < 0 || left > wrapRect.width) {
+        editorHl.style.display = 'none';
+        return;
+      }
+
+      editorHl.style.top     = top    + 'px';
+      editorHl.style.left    = left   + 'px';
+      editorHl.style.width   = (width  || 6) + 'px';
+      editorHl.style.height  = height + 'px';
+      editorHl.style.display = 'block';
+    }
+
+    function hideMatchOverlay() { editorHl.style.display = 'none'; }
+
+    // Re-render overlay when user scrolls the editor (match may have moved on screen)
+    editor.addEventListener('scroll', () => {
+      if (matchCursor >= 0 && !document.getElementById('find-bar').classList.contains('hidden')) {
+        showMatchOverlay(matchList[matchCursor]);
+      }
+    });
+
+    // ─── Match state ──────────────────────────────────────────────────────────
+
+    // Match navigation state
+    let matchList   = [];  // [{start, end, text}] for the current query
+    let matchCursor = -1;  // index of currently highlighted match (-1 = none)
+
+    /** Build a RegExp for the current query. global=true adds the g flag. */
+    function buildRegex(q, global) {
+      const flags = (findCaseEl.checked ? 'i' : '') + (global ? 'g' : '');
+      const pattern = findRegexEl.checked
+        ? q
+        : q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(pattern, flags);
+    }
+
+    /** Rebuild matchList from the current editor content + query. Resets matchCursor. */
+    function rebuildMatchList() {
+      matchList   = [];
+      matchCursor = -1;
+      const q = findInput.value;
+      if (!q) return;
+      try {
+        const r   = buildRegex(q, true);
+        const src = editor.value;
+        let m;
+        while ((m = r.exec(src)) !== null) {
+          matchList.push({ start: m.index, end: m.index + m[0].length, text: m[0] });
+          if (m[0].length === 0) r.lastIndex++;
+        }
+      } catch { /* invalid regex — leave matchList empty */ }
+    }
+
+    /** Render the count/navigation label and update nav button states. */
+    function renderCount() {
+      const n = matchList.length;
+      const q = findInput.value;
+      if (!q) {
+        findCountEl.textContent = '';
+        findCountEl.className   = 'find-count';
+      } else if (matchCursor >= 0 && n > 0) {
+        findCountEl.textContent = `${matchCursor + 1} of ${n}`;
+        findCountEl.className   = 'find-count has-match';
+      } else {
+        findCountEl.textContent = n === 0 ? 'No matches' : `${n} match${n === 1 ? '' : 'es'}`;
+        findCountEl.className   = 'find-count ' + (n === 0 ? 'no-match' : 'has-match');
+      }
+      btnFindPrev.disabled = n === 0;
+      btnFindNext.disabled = n === 0;
+    }
+
+    /**
+     * Highlight the first match using the overlay (works on all platforms regardless
+     * of focus state — inactive textarea selections are invisible on Android/iOS).
+     */
+    function autoSelectFirstMatch() {
+      if (matchList.length === 0) { matchCursor = -1; hideMatchOverlay(); return; }
+      const pos   = editor.selectionStart;
+      const first = matchList.findIndex(m => m.start >= pos);
+      matchCursor = first >= 0 ? first : 0;
+      showMatchOverlay(matchList[matchCursor]);
+    }
+
+    /** Rebuild match list, auto-select the first result, and re-render count. */
+    function updateFindCount() {
+      rebuildMatchList();
+      autoSelectFirstMatch();
+      renderCount();
+    }
+
+    /**
+     * Navigate to a specific match index (wraps around).
+     * Uses the readOnly trick to scroll the editor to the match without triggering
+     * the keyboard, then shows the overlay highlight and blurs so the cursor stays hidden.
+     */
+    function goToMatch(idx) {
+      if (matchList.length === 0) return;
+      const n       = matchList.length;
+      const didWrap = idx >= n || idx < 0;
+      matchCursor   = ((idx % n) + n) % n;
+      const m       = matchList[matchCursor];
+
+      // Scroll editor to the match position without triggering keyboard
+      const wasReadOnly = editor.readOnly;
+      editor.readOnly = true;
+      editor.focus({ preventScroll: true });
+      editor.setSelectionRange(m.start, m.end);
+      editor.blur();
+      editor.readOnly = wasReadOnly;
+
+      // Update overlay after the scroll has been applied
+      showMatchOverlay(m);
+
+      renderCount();
+      if (didWrap) showToast(idx >= n ? '↩ Wrapped to top' : '↩ Wrapped to bottom');
+    }
+
+    function nextMatch() {
+      if (matchList.length === 0) { showToast('No matches'); return; }
+      // matchCursor is always ≥ 0 after auto-select, but guard just in case
+      const idx = matchCursor < 0
+        ? matchList.findIndex(m => m.start >= editor.selectionStart) || 0
+        : matchCursor + 1;
+      goToMatch(idx);
+    }
+
+    function prevMatch() {
+      if (matchList.length === 0) { showToast('No matches'); return; }
+      goToMatch(matchCursor < 0 ? matchList.length - 1 : matchCursor - 1);
+    }
+
+    /** Replace the currently highlighted match and advance to the next. */
+    function replaceCurrent() {
+      if (matchList.length === 0) { showToast('No matches'); return; }
+
+      // If not yet on a match, navigate there first (second tap will replace)
+      if (matchCursor < 0) { nextMatch(); return; }
+
+      pushUndo();
+      const m   = matchList[matchCursor];
+      let   rep = replaceInput.value;
+
+      // For regex mode honour backreferences ($1, $2, $&, …)
+      if (findRegexEl.checked) {
+        try { rep = m.text.replace(buildRegex(findInput.value, false), rep); } catch { /* use literal */ }
+      }
+
+      const src    = editor.value;
+      const newSrc = src.slice(0, m.start) + rep + src.slice(m.end);
+      editor.value = newSrc;
+      commitSnap();
+      saveSource(newSrc);
+      syncControls(newSrc);
+      scheduleRender();
+
+      // Rebuild from new source; the replaced match is gone, cursor stays at same index.
+      // Keep focus in the find bar so the user can keep clicking Replace.
+      const prevCursor = matchCursor;
+      rebuildMatchList();
+
+      if (matchList.length > 0) {
+        goToMatch(prevCursor < matchList.length ? prevCursor : matchList.length - 1);
+      } else {
+        renderCount();
+        showToast('No more matches');
+      }
+    }
+
+    /** Replace every match at once. */
+    function replaceAll() {
+      const q = findInput.value;
+      if (!q) return;
+      let regex;
+      try { regex = buildRegex(q, true); } catch { showToast('Invalid regex pattern'); return; }
+
+      const src   = editor.value;
+      const count = (src.match(regex) || []).length;
+      if (count === 0) { showToast('No matches found'); return; }
+
+      pushUndo();
+      const newSrc = src.replace(regex, replaceInput.value);
+      editor.value = newSrc;
+      commitSnap();
+      saveSource(newSrc);
+      syncControls(newSrc);
+      scheduleRender();
+
+      matchList   = [];
+      matchCursor = -1;
+      renderCount();
+      showToast(`Replaced ${count} occurrence${count === 1 ? '' : 's'}`);
+    }
+
+    function openFindBar() {
+      findBar.classList.remove('hidden');
+      updateFindCount(); // rebuild + auto-select before focusing find input
+      findInput.focus();
+      findInput.select();
+    }
+
+    function closeFindBar() {
+      findBar.classList.add('hidden');
+      matchCursor = -1;
+      hideMatchOverlay();
+      editor.focus();
+    }
+
+    document.getElementById('btn-find-open').addEventListener('click', openFindBar);
+    document.getElementById('btn-find-close').addEventListener('click', closeFindBar);
+    btnFindPrev.addEventListener('click', prevMatch);
+    btnFindNext.addEventListener('click', nextMatch);
+    document.getElementById('btn-replace-one').addEventListener('click', replaceCurrent);
+    document.getElementById('btn-replace-all').addEventListener('click', replaceAll);
+
+    findInput.addEventListener('input', updateFindCount);
+    findCaseEl.addEventListener('change', updateFindCount);
+    findRegexEl.addEventListener('change', updateFindCount);
+
+    // Keyboard shortcuts within the find bar
+    findInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); e.shiftKey ? prevMatch() : nextMatch(); }
+      if (e.key === 'Escape') closeFindBar();
+    });
+    replaceInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); replaceCurrent(); }
+      if (e.key === 'Escape') closeFindBar();
+    });
+
+    // ─── Editor events ────────────────────────────────────────────────────────
+
+    editor.addEventListener('input', () => {
+      const source = editor.value;
+      saveSource(source);
+      syncControls(source);
+      scheduleSnap();
+      scheduleRender();
+      // Rebuild matches when source changes (positions may have shifted)
+      if (!findBar.classList.contains('hidden')) updateFindCount();
+    });
+
+    editor.addEventListener('keydown', e => {
+      const mod = e.ctrlKey || e.metaKey;
+
+      // Tab → indent with 2 spaces
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        pushUndo();
+        const s = editor.selectionStart;
+        editor.value = editor.value.slice(0, s) + '  ' + editor.value.slice(editor.selectionEnd);
+        editor.selectionStart = editor.selectionEnd = s + 2;
+        commitSnap();
+        saveSource(editor.value);
+        syncControls(editor.value);
+        scheduleRender();
+        return;
+      }
+
+      // Ctrl/Cmd+Z → undo
+      if (mod && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        doUndo();
+        return;
+      }
+
+      // Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y → redo
+      if (mod && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        doRedo();
+        return;
+      }
+
+      // Ctrl/Cmd+F or Ctrl/Cmd+H → find & replace
+      if (mod && (e.key === 'f' || e.key === 'h')) {
+        e.preventDefault();
+        openFindBar();
+        return;
+      }
+
+      // Escape → close find bar
+      if (e.key === 'Escape') {
+        closeFindBar();
+      }
+    });
+
+    // ─── Layout / Sketch controls ─────────────────────────────────────────────
+
+    function applyAndRender() {
+      pushUndo();
+      const newSource = applyConfig(editor.value, layoutSelect.value, sketchToggle.checked);
+      editor.value = newSource;
+      commitSnap();
+      saveSource(newSource);
+      scheduleRender();
+    }
+
+    layoutSelect.addEventListener('change', applyAndRender);
+    sketchToggle.addEventListener('change', applyAndRender);
+
+    // ─── Export helpers ───────────────────────────────────────────────────────
+
+    function download(content, filename, type) {
+      const blob = new Blob([content], { type });
+      const url  = URL.createObjectURL(blob);
+      const a    = Object.assign(document.createElement('a'), { href: url, download: filename });
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    }
+
+    function svgToPngBlob(svgString) {
+      return new Promise((resolve, reject) => {
+        // Parse to get dimensions
+        const parser = new DOMParser();
+        const doc    = parser.parseFromString(svgString, 'image/svg+xml');
+        const svgEl  = doc.documentElement;
+
+        let w = parseFloat(svgEl.getAttribute('width'))  || 0;
+        let h = parseFloat(svgEl.getAttribute('height')) || 0;
+
+        if (!w || !h) {
+          const vb = svgEl.getAttribute('viewBox');
+          if (vb) {
+            const parts = vb.trim().split(/[\s,]+/);
+            w = parseFloat(parts[2]) || 800;
+            h = parseFloat(parts[3]) || 600;
+          } else {
+            w = 800; h = 600;
+          }
+        }
+
+        const scale  = 2; // 2× for retina
+        const canvas = document.createElement('canvas');
+        canvas.width  = w * scale;
+        canvas.height = h * scale;
+        const ctx = canvas.getContext('2d');
+        ctx.scale(scale, scale);
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, w, h);
+
+        const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+        const url  = URL.createObjectURL(blob);
+        const img  = new Image();
+        img.onload = () => {
+          ctx.drawImage(img, 0, 0, w, h);
+          URL.revokeObjectURL(url);
+          canvas.toBlob(resolve, 'image/png');
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('SVG load failed')); };
+        img.src = url;
+      });
+    }
+
+    // ─── Toast ────────────────────────────────────────────────────────────────
+
+    let toastTimer = null;
+    function showToast(msg) {
+      toastEl.textContent = msg;
+      toastEl.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2200);
+    }
+
+    // ─── Button handlers ──────────────────────────────────────────────────────
+
+    document.getElementById('btn-download-d2').addEventListener('click', () => {
+      download(editor.value, 'diagram.d2', 'text/plain');
+      showToast('Downloaded diagram.d2');
+    });
+
+    document.getElementById('btn-copy').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(editor.value);
+        showToast('Copied to clipboard!');
+      } catch {
+        showToast('Clipboard unavailable');
+      }
+    });
+
+    document.getElementById('btn-download-svg').addEventListener('click', () => {
+      if (!currentSvg) { showToast('No diagram yet — switch to Preview first'); return; }
+      download(currentSvg, 'diagram.svg', 'image/svg+xml');
+      showToast('Downloaded diagram.svg');
+    });
+
+    document.getElementById('btn-download-png').addEventListener('click', async () => {
+      if (!currentSvg) { showToast('No diagram yet — switch to Preview first'); return; }
+      try {
+        const blob = await svgToPngBlob(currentSvg);
+        const url  = URL.createObjectURL(blob);
+        const a    = Object.assign(document.createElement('a'), { href: url, download: 'diagram.png' });
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        showToast('Downloaded diagram.png');
+      } catch (err) {
+        showToast('PNG export failed: ' + err.message);
+      }
+    });
+
+    // ─── Reset modal ──────────────────────────────────────────────────────────
+
+    const modalEl = document.getElementById('modal-reset');
+
+    function openResetModal() { modalEl.classList.remove('hidden'); }
+    function closeResetModal() { modalEl.classList.add('hidden'); }
+
+    document.getElementById('btn-open-reset').addEventListener('click', openResetModal);
+    document.getElementById('btn-modal-cancel').addEventListener('click', closeResetModal);
+
+    // Close on backdrop tap
+    modalEl.addEventListener('click', e => { if (e.target === modalEl) closeResetModal(); });
+
+    function applyReset(source, toastMsg) {
+      closeResetModal();
+      pushUndo();
+      editor.value             = source;
+      commitSnap();
+      currentSvg               = '';
+      previewContent.innerHTML = '';
+      syncControls(source);
+      saveSource(source);
+      showToast(toastMsg);
+      scheduleRender();
+    }
+
+    document.getElementById('btn-blank').addEventListener('click', () => {
+      applyReset('', 'Cleared to blank');
+    });
+
+    document.getElementById('btn-example').addEventListener('click', () => {
+      applyReset(DEFAULT_SOURCE, 'Reset to example');
+    });
+
+    // ─── Init ─────────────────────────────────────────────────────────────────
+
+    async function init() {
+      // Restore source
+      const source = loadSource();
+      editor.value = source;
+      snapValue    = source;  // seed the undo baseline
+
+      syncControls(source);
+
+      // Load D2 WASM
+      setStatus('loading', 'Loading D2…');
+      showSpinner(true);
+
+      try {
+        d2 = new D2();
+        // Kick off first render
+        await doRender(source);
+      } catch (err) {
+        const msg = (err && err.message) ? err.message : String(err);
+        setStatus('error', 'Load failed');
+        previewContent.innerHTML =
+          `<div class="preview-error">Failed to initialise D2:\n\n${escHtml(msg)}</div>`;
+        showSpinner(false);
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
