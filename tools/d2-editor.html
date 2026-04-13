@@ -1700,8 +1700,88 @@ cache -> db: Sync
       if (!findBar.classList.contains('hidden')) updateFindCount();
     });
 
+    // ── Auto-closing brackets ───────────────────────────────────────────────
+    // Uses beforeinput (fires before DOM change, cancels reliably) for pair
+    // insertion, and keydown for skip-over / pair-delete behaviours.
+    const BRACKET_PAIRS  = { '{': '}', '[': ']', '(': ')' };
+    const CLOSE_BRACKETS = new Set(['}', ']', ')']);
+
+    editor.addEventListener('beforeinput', e => {
+      if (e.inputType !== 'insertText') return;
+      const close = BRACKET_PAIRS[e.data];
+      if (close === undefined) return;
+
+      e.preventDefault();
+      pushUndo();
+      const s   = editor.selectionStart;
+      const end = editor.selectionEnd;
+      const sel = editor.value.slice(s, end);
+      if (sel.length > 0) {
+        // Wrap the selection with the bracket pair
+        editor.value = editor.value.slice(0, s) + e.data + sel + close + editor.value.slice(end);
+        editor.selectionStart = s + 1;
+        editor.selectionEnd   = end + 1;
+      } else {
+        // Insert pair and place cursor between them
+        editor.value = editor.value.slice(0, s) + e.data + close + editor.value.slice(end);
+        editor.selectionStart = editor.selectionEnd = s + 1;
+      }
+      commitSnap();
+      saveSource(editor.value);
+      scheduleRender();
+    });
+    // ────────────────────────────────────────────────────────────────────────
+
     editor.addEventListener('keydown', e => {
       const mod = e.ctrlKey || e.metaKey;
+
+      // Closing bracket → skip over it if it's already the next character
+      if (!mod && CLOSE_BRACKETS.has(e.key) &&
+          editor.selectionStart === editor.selectionEnd &&
+          editor.value[editor.selectionStart] === e.key) {
+        e.preventDefault();
+        editor.selectionStart = editor.selectionEnd = editor.selectionStart + 1;
+        return;
+      }
+
+      // Backspace → delete both chars when cursor sits inside an empty pair
+      if (e.key === 'Backspace' && !mod && !e.altKey &&
+          editor.selectionStart === editor.selectionEnd) {
+        const s = editor.selectionStart;
+        if (s > 0 && BRACKET_PAIRS[editor.value[s - 1]] === editor.value[s]) {
+          e.preventDefault();
+          pushUndo();
+          editor.value = editor.value.slice(0, s - 1) + editor.value.slice(s + 1);
+          editor.selectionStart = editor.selectionEnd = s - 1;
+          commitSnap();
+          saveSource(editor.value);
+          scheduleRender();
+          return;
+        }
+      }
+
+      // Enter inside a bracket pair → expand to indented block
+      //   {|}  →  {\n    |\n}  (| = cursor, indented by current line + 2 spaces)
+      if (e.key === 'Enter' && !mod &&
+          editor.selectionStart === editor.selectionEnd) {
+        const s = editor.selectionStart;
+        if (s > 0 && BRACKET_PAIRS[editor.value[s - 1]] === editor.value[s]) {
+          e.preventDefault();
+          pushUndo();
+          // Find indentation of the current line
+          const lineStart = editor.value.lastIndexOf('\n', s - 1) + 1;
+          const lineIndent = editor.value.slice(lineStart, s).match(/^(\s*)/)[1];
+          const innerIndent = lineIndent + '  ';
+          // Insert: newline + inner indent + newline + outer indent, keeping the closing bracket
+          const insertion = '\n' + innerIndent + '\n' + lineIndent;
+          editor.value = editor.value.slice(0, s) + insertion + editor.value.slice(s);
+          editor.selectionStart = editor.selectionEnd = s + 1 + innerIndent.length;
+          commitSnap();
+          saveSource(editor.value);
+          scheduleRender();
+          return;
+        }
+      }
 
       // Tab → indent with 2 spaces
       if (e.key === 'Tab') {
