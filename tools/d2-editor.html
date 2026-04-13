@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>D2 Editor</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #f4f5f7;
+      --surface:     #ffffff;
+      --text:        #1a1a1a;
+      --muted:       #6b7280;
+      --border:      #e3e3e3;
+      --accent:      #5b5bd6;
+      --accent-dk:   #4646b0;
+      --danger:      #dc2626;
+      --danger-bg:   #fef2f2;
+      --danger-bdr:  #fecaca;
+      --sh-sm:       0 1px 4px rgba(0,0,0,.08);
+      --tab-h:       58px;
+      --hdr-h:       52px;
+      --safe-b:      env(safe-area-inset-bottom, 0px);
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ───────────────────────────────── */
+    .hdr {
+      height: var(--hdr-h);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      flex-shrink: 0;
+      box-shadow: var(--sh-sm);
+      gap: 10px;
+    }
+
+    .hdr-title {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+
+    .hdr-badge {
+      font-size: 11px;
+      font-weight: 700;
+      background: #ededfa;
+      color: var(--accent);
+      border-radius: 8px;
+      padding: 2px 8px;
+    }
+
+    .hdr-status {
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .hdr-status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .hdr-status-dot.ready   { background: #16a34a; }
+    .hdr-status-dot.error   { background: var(--danger); }
+    .hdr-status-dot.loading { background: var(--accent); animation: pulse 1s ease-in-out infinite; }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    /* ── Main area ────────────────────────────── */
+    .main {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* ── Panels ───────────────────────────────── */
+    .panel {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+    }
+    .panel.active { display: flex; }
+
+    /* ── Editor panel ─────────────────────────── */
+    #panel-editor { background: #1e1e2e; }
+
+    #editor {
+      flex: 1;
+      width: 100%;
+      resize: none;
+      border: none;
+      outline: none;
+      padding: 16px;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+      font-size: 14px;
+      line-height: 1.65;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      tab-size: 2;
+      caret-color: #cba6f7;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    #editor::selection { background: #45475a; }
+
+    /* ── Preview panel ────────────────────────── */
+    #panel-preview { background: var(--bg); }
+
+    .preview-controls {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+
+    .ctrl-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .4px;
+      white-space: nowrap;
+    }
+
+    .ctrl-select {
+      flex: 1;
+      min-width: 90px;
+      height: 36px;
+      border: 1.5px solid var(--border);
+      border-radius: 9px;
+      padding: 0 10px;
+      font-size: 14px;
+      font-weight: 500;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+      padding-right: 30px;
+      cursor: pointer;
+    }
+
+    .ctrl-divider {
+      width: 1px;
+      height: 24px;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+
+    /* Toggle switch */
+    .toggle-wrap {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      white-space: nowrap;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .toggle-wrap .ctrl-label { cursor: pointer; }
+
+    .toggle {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+
+    .toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+      position: absolute;
+    }
+
+    .toggle-track {
+      position: absolute;
+      inset: 0;
+      background: var(--border);
+      border-radius: 12px;
+      transition: background .2s;
+      cursor: pointer;
+    }
+
+    .toggle input:checked + .toggle-track { background: var(--accent); }
+
+    .toggle-track::after {
+      content: '';
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 18px;
+      height: 18px;
+      background: white;
+      border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0,0,0,.2);
+      transition: transform .2s;
+    }
+
+    .toggle input:checked + .toggle-track::after { transform: translateX(20px); }
+
+    /* Preview area */
+    .preview-area {
+      flex: 1;
+      overflow: auto;
+      position: relative;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .preview-area svg {
+      max-width: 100%;
+      height: auto;
+      border-radius: 10px;
+      background: white;
+    }
+
+    .preview-empty {
+      margin-top: 60px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.6;
+    }
+
+    .preview-error {
+      width: 100%;
+      background: var(--danger-bg);
+      border: 1px solid var(--danger-bdr);
+      border-radius: 10px;
+      padding: 14px 16px;
+      font-size: 13px;
+      color: var(--danger);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.5;
+    }
+
+    /* Spinner overlay */
+    .spin-wrap {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: rgba(244,245,247,.85);
+      backdrop-filter: blur(2px);
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .spin-wrap.hidden { display: none; }
+
+    .spinner {
+      width: 34px;
+      height: 34px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .spin-text {
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    /* ── Manage panel ─────────────────────────── */
+    #panel-manage {
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 20px 16px 24px;
+      gap: 0;
+    }
+
+    .section {
+      margin-bottom: 28px;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: var(--muted);
+      margin-bottom: 10px;
+      padding-left: 2px;
+    }
+
+    .btn-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+
+    .btn {
+      width: 100%;
+      min-height: 52px;
+      border: 1.5px solid var(--border);
+      border-radius: 13px;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 12px;
+      transition: background .12s, border-color .12s, transform .08s;
+      -webkit-tap-highlight-color: transparent;
+      text-align: left;
+    }
+
+    .btn:active { background: var(--bg); transform: scale(.98); }
+
+    .btn-icon {
+      width: 22px;
+      height: 22px;
+      flex-shrink: 0;
+      color: var(--muted);
+    }
+
+    .btn-danger {
+      background: var(--danger-bg);
+      border-color: var(--danger-bdr);
+      color: var(--danger);
+    }
+
+    .btn-danger .btn-icon { color: var(--danger); }
+    .btn-danger:active { background: #fee2e2; }
+
+    /* ── Tab bar ──────────────────────────────── */
+    .tab-bar {
+      height: calc(var(--tab-h) + var(--safe-b));
+      padding-bottom: var(--safe-b);
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-shrink: 0;
+    }
+
+    .tab-btn {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .4px;
+      text-transform: uppercase;
+      -webkit-tap-highlight-color: transparent;
+      transition: color .15s;
+    }
+
+    .tab-btn svg { width: 23px; height: 23px; }
+    .tab-btn.active { color: var(--accent); }
+
+    /* ── Toast ────────────────────────────────── */
+    .toast {
+      position: fixed;
+      bottom: calc(var(--tab-h) + var(--safe-b) + 14px);
+      left: 50%;
+      transform: translateX(-50%) translateY(6px);
+      background: #1a1a2e;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 500;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .2s, transform .2s;
+      z-index: 500;
+      white-space: nowrap;
+      box-shadow: 0 4px 20px rgba(0,0,0,.25);
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="hdr">
+    <span class="hdr-title">D2 Editor</span>
+    <span class="hdr-badge">WASM</span>
+    <span class="hdr-status">
+      <span class="hdr-status-dot loading" id="status-dot"></span>
+      <span id="status-text">Loading…</span>
+    </span>
+  </header>
+
+  <!-- Main panels -->
+  <main class="main">
+
+    <!-- Editor -->
+    <div id="panel-editor" class="panel active">
+      <textarea id="editor"
+        spellcheck="false"
+        autocorrect="off"
+        autocapitalize="off"
+        autocomplete="off"
+      ></textarea>
+    </div>
+
+    <!-- Preview -->
+    <div id="panel-preview" class="panel">
+      <div class="preview-controls">
+        <span class="ctrl-label">Layout</span>
+        <select id="layout-select" class="ctrl-select" title="Layout engine">
+          <option value="dagre">Dagre</option>
+          <option value="elk">ELK</option>
+          <option value="tala">TALA</option>
+        </select>
+        <div class="ctrl-divider"></div>
+        <label class="toggle-wrap" title="Sketch (hand-drawn) rendering">
+          <span class="ctrl-label">Sketch</span>
+          <span class="toggle">
+            <input type="checkbox" id="sketch-toggle" />
+            <span class="toggle-track"></span>
+          </span>
+        </label>
+      </div>
+      <div class="preview-area" id="preview-area">
+        <div class="spin-wrap" id="spinner">
+          <div class="spinner"></div>
+          <span class="spin-text">Rendering…</span>
+        </div>
+        <div id="preview-content"></div>
+      </div>
+    </div>
+
+    <!-- Manage -->
+    <div id="panel-manage" class="panel">
+      <div class="section">
+        <div class="section-title">Source</div>
+        <div class="btn-stack">
+          <button class="btn" id="btn-download-d2">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Download .d2 file
+          </button>
+          <button class="btn" id="btn-copy">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+            </svg>
+            Copy source to clipboard
+          </button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Diagram</div>
+        <div class="btn-stack">
+          <button class="btn" id="btn-download-svg">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Download SVG
+          </button>
+          <button class="btn" id="btn-download-png">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+            </svg>
+            Download PNG
+          </button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Danger zone</div>
+        <div class="btn-stack">
+          <button class="btn btn-danger" id="btn-clear">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
+            </svg>
+            Clear everything
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Tab bar -->
+  <nav class="tab-bar">
+    <button class="tab-btn active" data-tab="editor">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+      </svg>
+      Editor
+    </button>
+    <button class="tab-btn" data-tab="preview">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+      </svg>
+      Preview
+    </button>
+    <button class="tab-btn" data-tab="manage">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      Export
+    </button>
+  </nav>
+
+  <div class="toast" id="toast"></div>
+
+  <script type="module">
+    // Uses @terrastruct/d2 — the JavaScript/WASM package for D2 diagrams.
+    // @terrastruct/d2-wasm is the underlying compiled WASM binary; @terrastruct/d2
+    // is the JS wrapper that provides the clean API used here.
+    import { D2 } from 'https://esm.sh/@terrastruct/d2';
+
+    // ─── Constants ────────────────────────────────────────────────────────────
+
+    const LS_KEY       = 'd2-editor-source';
+    const DEBOUNCE_MS  = 700;
+
+    const DEFAULT_SOURCE =
+`vars: {
+  d2-config: {
+    layout-engine: dagre
+  }
+}
+
+# Sample diagram — edit me!
+web: Web Browser
+api: API Server {shape: hexagon}
+db: Database {shape: cylinder}
+cache: Cache {shape: cloud}
+
+web -> api: HTTP
+api -> db: Query
+api -> cache: Read/Write
+cache -> db: Sync
+`;
+
+    // ─── State ────────────────────────────────────────────────────────────────
+
+    let d2         = null;   // D2 instance (null until WASM loaded)
+    let currentSvg = '';     // Last successfully rendered SVG string
+    let renderTimer = null;
+    let rendering   = false;
+
+    // ─── DOM refs ─────────────────────────────────────────────────────────────
+
+    const editor        = document.getElementById('editor');
+    const layoutSelect  = document.getElementById('layout-select');
+    const sketchToggle  = document.getElementById('sketch-toggle');
+    const previewContent= document.getElementById('preview-content');
+    const spinnerEl     = document.getElementById('spinner');
+    const statusDot     = document.getElementById('status-dot');
+    const statusText    = document.getElementById('status-text');
+    const toastEl       = document.getElementById('toast');
+
+    // ─── Status indicator ─────────────────────────────────────────────────────
+
+    function setStatus(state, text) {
+      statusDot.className = 'hdr-status-dot ' + state;
+      statusText.textContent = text;
+    }
+
+    // ─── D2 config helpers ────────────────────────────────────────────────────
+
+    /**
+     * Read layout-engine and sketch values from D2 source.
+     */
+    function parseD2Config(source) {
+      const layoutMatch = source.match(/layout-engine:\s*(\w+)/);
+      const sketchMatch = source.match(/sketch:\s*true/);
+      return {
+        layoutEngine: layoutMatch ? layoutMatch[1] : 'dagre',
+        sketch:       !!sketchMatch,
+      };
+    }
+
+    /**
+     * Remove the auto-managed vars { d2-config { ... } } block from the top of
+     * the source. Uses brace-counting so it's robust to extra content inside.
+     */
+    function stripConfigBlock(source) {
+      const lines = source.split('\n');
+      let i = 0;
+
+      // Skip any leading blank lines
+      while (i < lines.length && lines[i].trim() === '') i++;
+
+      // Only strip if source starts (after blanks) with `vars:`
+      if (i >= lines.length || !lines[i].trim().startsWith('vars:')) return source;
+
+      const startLine = i;
+      let depth   = 0;
+      let hasD2   = false;
+      let endLine = startLine;
+
+      for (let j = startLine; j < lines.length; j++) {
+        const t = lines[j];
+        for (const ch of t) {
+          if (ch === '{') depth++;
+          else if (ch === '}') depth--;
+        }
+        if (lines[j].trim().startsWith('d2-config')) hasD2 = true;
+        endLine = j;
+        if (j > startLine && depth === 0) break;
+        if (j === startLine && depth === 0) break; // no opening brace
+      }
+
+      // Only strip if this vars block actually contained d2-config
+      if (!hasD2 || depth !== 0) return source;
+
+      const remaining = lines.slice(endLine + 1);
+      // Remove leading blank lines from the remainder
+      while (remaining.length && remaining[0].trim() === '') remaining.shift();
+
+      const before = lines.slice(0, startLine);
+      return [...before, ...remaining].join('\n');
+    }
+
+    /**
+     * Build the vars { d2-config { ... } } block from current settings.
+     */
+    function buildConfigBlock(layoutEngine, sketch) {
+      const inner = [`    layout-engine: ${layoutEngine}`];
+      if (sketch) inner.push('    sketch: true');
+      return `vars: {\n  d2-config: {\n${inner.join('\n')}\n  }\n}\n\n`;
+    }
+
+    /**
+     * Replace (or insert) the config block at the top of source.
+     */
+    function applyConfig(source, layoutEngine, sketch) {
+      const userContent = stripConfigBlock(source);
+      return buildConfigBlock(layoutEngine, sketch) + userContent;
+    }
+
+    // ─── Rendering ────────────────────────────────────────────────────────────
+
+    function showSpinner(show) {
+      spinnerEl.classList.toggle('hidden', !show);
+    }
+
+    async function doRender(source) {
+      if (!d2) return;
+      rendering = true;
+      showSpinner(true);
+      try {
+        const compiled = await d2.compile(source);
+        const svg = await d2.render(compiled.diagram, compiled.renderOptions);
+        currentSvg = svg;
+        previewContent.innerHTML = svg;
+        // Make SVG responsive
+        const svgEl = previewContent.querySelector('svg');
+        if (svgEl) {
+          svgEl.removeAttribute('width');
+          svgEl.removeAttribute('height');
+          svgEl.style.width  = '100%';
+          svgEl.style.height = 'auto';
+        }
+        setStatus('ready', 'Ready');
+      } catch (err) {
+        const msg = (err && err.message) ? err.message : String(err);
+        previewContent.innerHTML = `<div class="preview-error">${escHtml(msg)}</div>`;
+        setStatus('error', 'Error');
+      } finally {
+        rendering = false;
+        showSpinner(false);
+      }
+    }
+
+    function scheduleRender() {
+      clearTimeout(renderTimer);
+      showSpinner(true);
+      setStatus('loading', 'Rendering…');
+      renderTimer = setTimeout(() => doRender(editor.value), DEBOUNCE_MS);
+    }
+
+    function escHtml(s) {
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    // ─── LocalStorage ─────────────────────────────────────────────────────────
+
+    function loadSource() {
+      return localStorage.getItem(LS_KEY) || DEFAULT_SOURCE;
+    }
+
+    function saveSource(source) {
+      try { localStorage.setItem(LS_KEY, source); } catch (_) {}
+    }
+
+    // ─── Tab switching ────────────────────────────────────────────────────────
+
+    const tabBtns  = document.querySelectorAll('.tab-btn');
+    const panels   = document.querySelectorAll('.panel');
+
+    function switchTab(name) {
+      tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+      panels.forEach(p => p.classList.toggle('active', p.id === `panel-${name}`));
+    }
+
+    tabBtns.forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+
+    // ─── Editor events ────────────────────────────────────────────────────────
+
+    editor.addEventListener('input', () => {
+      const source = editor.value;
+      saveSource(source);
+
+      // Sync controls to whatever the user typed
+      const cfg = parseD2Config(source);
+      layoutSelect.value   = cfg.layoutEngine;
+      sketchToggle.checked = cfg.sketch;
+
+      scheduleRender();
+    });
+
+    // Support Tab key for indentation
+    editor.addEventListener('keydown', e => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const s = editor.selectionStart;
+        const v = editor.value;
+        editor.value = v.slice(0, s) + '  ' + v.slice(editor.selectionEnd);
+        editor.selectionStart = editor.selectionEnd = s + 2;
+        editor.dispatchEvent(new Event('input'));
+      }
+    });
+
+    // ─── Layout / Sketch controls ─────────────────────────────────────────────
+
+    function applyAndRender() {
+      const newSource = applyConfig(editor.value, layoutSelect.value, sketchToggle.checked);
+      editor.value = newSource;
+      saveSource(newSource);
+      scheduleRender();
+    }
+
+    layoutSelect.addEventListener('change', applyAndRender);
+    sketchToggle.addEventListener('change', applyAndRender);
+
+    // ─── Export helpers ───────────────────────────────────────────────────────
+
+    function download(content, filename, type) {
+      const blob = new Blob([content], { type });
+      const url  = URL.createObjectURL(blob);
+      const a    = Object.assign(document.createElement('a'), { href: url, download: filename });
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    }
+
+    function svgToPngBlob(svgString) {
+      return new Promise((resolve, reject) => {
+        // Parse to get dimensions
+        const parser = new DOMParser();
+        const doc    = parser.parseFromString(svgString, 'image/svg+xml');
+        const svgEl  = doc.documentElement;
+
+        let w = parseFloat(svgEl.getAttribute('width'))  || 0;
+        let h = parseFloat(svgEl.getAttribute('height')) || 0;
+
+        if (!w || !h) {
+          const vb = svgEl.getAttribute('viewBox');
+          if (vb) {
+            const parts = vb.trim().split(/[\s,]+/);
+            w = parseFloat(parts[2]) || 800;
+            h = parseFloat(parts[3]) || 600;
+          } else {
+            w = 800; h = 600;
+          }
+        }
+
+        const scale  = 2; // 2× for retina
+        const canvas = document.createElement('canvas');
+        canvas.width  = w * scale;
+        canvas.height = h * scale;
+        const ctx = canvas.getContext('2d');
+        ctx.scale(scale, scale);
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, w, h);
+
+        const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+        const url  = URL.createObjectURL(blob);
+        const img  = new Image();
+        img.onload = () => {
+          ctx.drawImage(img, 0, 0, w, h);
+          URL.revokeObjectURL(url);
+          canvas.toBlob(resolve, 'image/png');
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('SVG load failed')); };
+        img.src = url;
+      });
+    }
+
+    // ─── Toast ────────────────────────────────────────────────────────────────
+
+    let toastTimer = null;
+    function showToast(msg) {
+      toastEl.textContent = msg;
+      toastEl.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2200);
+    }
+
+    // ─── Button handlers ──────────────────────────────────────────────────────
+
+    document.getElementById('btn-download-d2').addEventListener('click', () => {
+      download(editor.value, 'diagram.d2', 'text/plain');
+      showToast('Downloaded diagram.d2');
+    });
+
+    document.getElementById('btn-copy').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(editor.value);
+        showToast('Copied to clipboard!');
+      } catch {
+        showToast('Clipboard unavailable');
+      }
+    });
+
+    document.getElementById('btn-download-svg').addEventListener('click', () => {
+      if (!currentSvg) { showToast('No diagram yet — switch to Preview first'); return; }
+      download(currentSvg, 'diagram.svg', 'image/svg+xml');
+      showToast('Downloaded diagram.svg');
+    });
+
+    document.getElementById('btn-download-png').addEventListener('click', async () => {
+      if (!currentSvg) { showToast('No diagram yet — switch to Preview first'); return; }
+      try {
+        const blob = await svgToPngBlob(currentSvg);
+        const url  = URL.createObjectURL(blob);
+        const a    = Object.assign(document.createElement('a'), { href: url, download: 'diagram.png' });
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        showToast('Downloaded diagram.png');
+      } catch (err) {
+        showToast('PNG export failed: ' + err.message);
+      }
+    });
+
+    document.getElementById('btn-clear').addEventListener('click', () => {
+      if (!confirm('Reset the editor to the default example? Your current source will be lost.')) return;
+      try { localStorage.removeItem(LS_KEY); } catch (_) {}
+      editor.value        = DEFAULT_SOURCE;
+      currentSvg          = '';
+      previewContent.innerHTML = '';
+
+      const cfg = parseD2Config(DEFAULT_SOURCE);
+      layoutSelect.value   = cfg.layoutEngine;
+      sketchToggle.checked = cfg.sketch;
+
+      showToast('Cleared — reset to default');
+      scheduleRender();
+    });
+
+    // ─── Init ─────────────────────────────────────────────────────────────────
+
+    async function init() {
+      // Restore source
+      const source = loadSource();
+      editor.value = source;
+
+      // Sync controls
+      const cfg = parseD2Config(source);
+      layoutSelect.value   = cfg.layoutEngine;
+      sketchToggle.checked = cfg.sketch;
+
+      // Load D2 WASM
+      setStatus('loading', 'Loading D2…');
+      showSpinner(true);
+
+      try {
+        d2 = new D2();
+        // Kick off first render
+        await doRender(source);
+      } catch (err) {
+        const msg = (err && err.message) ? err.message : String(err);
+        setStatus('error', 'Load failed');
+        previewContent.innerHTML =
+          `<div class="preview-error">Failed to initialise D2:\n\n${escHtml(msg)}</div>`;
+        showSpinner(false);
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
