@@ -742,7 +742,7 @@
         </div>
         <div class="find-options">
           <label class="find-opt-label">
-            <input type="checkbox" id="find-case" /> Case sensitive
+            <input type="checkbox" id="find-case" /> Case insensitive
           </label>
           <label class="find-opt-label">
             <input type="checkbox" id="find-regex" /> Regex
@@ -1264,7 +1264,7 @@ cache -> db: Sync
 
     /** Build a RegExp for the current query. global=true adds the g flag. */
     function buildRegex(q, global) {
-      const flags = (findCaseEl.checked ? '' : 'i') + (global ? 'g' : '');
+      const flags = (findCaseEl.checked ? 'i' : '') + (global ? 'g' : '');
       const pattern = findRegexEl.checked
         ? q
         : q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
