@@ -1150,47 +1150,55 @@ cache -> db: Sync
       btnFindNext.disabled = n === 0;
     }
 
-    /** Rebuild match list and re-render count (call when query or source changes). */
+    /**
+     * Silently pre-select the first match at/after the cursor without stealing
+     * focus from the find input. On desktop the inactive selection is visible;
+     * on mobile it at least primes the cursor position and shows "1 of N".
+     */
+    function autoSelectFirstMatch() {
+      if (matchList.length === 0) return;
+      const pos   = editor.selectionStart;
+      const first = matchList.findIndex(m => m.start >= pos);
+      matchCursor = first >= 0 ? first : 0;
+      try { editor.setSelectionRange(matchList[matchCursor].start, matchList[matchCursor].end); } catch {}
+    }
+
+    /** Rebuild match list, auto-select the first result, and re-render count. */
     function updateFindCount() {
       rebuildMatchList();
+      autoSelectFirstMatch();
       renderCount();
     }
 
-    /** Select the match at matchCursor in the textarea and scroll it into view. */
-    function selectCurrentMatch() {
-      if (matchCursor < 0 || matchCursor >= matchList.length) return;
-      const m = matchList[matchCursor];
-      editor.focus();
-      editor.setSelectionRange(m.start, m.end);
-      renderCount();
-    }
-
-    /** Navigate to a specific match index (wraps around). */
-    function goToMatch(idx) {
+    /**
+     * Navigate to a specific match index (wraps around).
+     * focusEditor=true  → focus the textarea (explicit user navigation).
+     * focusEditor=false → keep focus where it is (e.g. after single replace).
+     */
+    function goToMatch(idx, focusEditor = true) {
       if (matchList.length === 0) return;
-      matchCursor = ((idx % matchList.length) + matchList.length) % matchList.length;
-      selectCurrentMatch();
+      const n       = matchList.length;
+      const didWrap = idx >= n || idx < 0;
+      matchCursor   = ((idx % n) + n) % n;
+      const m       = matchList[matchCursor];
+      if (focusEditor) editor.focus();
+      try { editor.setSelectionRange(m.start, m.end); } catch {}
+      renderCount();
+      if (didWrap) showToast(idx >= n ? '↩ Wrapped to top' : '↩ Wrapped to bottom');
     }
 
     function nextMatch() {
       if (matchList.length === 0) { showToast('No matches'); return; }
-      if (matchCursor < 0) {
-        // Start from the cursor position in the editor
-        const pos   = editor.selectionStart;
-        const first = matchList.findIndex(m => m.start >= pos);
-        goToMatch(first >= 0 ? first : 0);
-      } else {
-        goToMatch(matchCursor + 1);
-      }
+      // matchCursor is always ≥ 0 after auto-select, but guard just in case
+      const idx = matchCursor < 0
+        ? matchList.findIndex(m => m.start >= editor.selectionStart) || 0
+        : matchCursor + 1;
+      goToMatch(idx);
     }
 
     function prevMatch() {
       if (matchList.length === 0) { showToast('No matches'); return; }
-      if (matchCursor < 0) {
-        goToMatch(matchList.length - 1);
-      } else {
-        goToMatch(matchCursor - 1);
-      }
+      goToMatch(matchCursor < 0 ? matchList.length - 1 : matchCursor - 1);
     }
 
     /** Replace the currently highlighted match and advance to the next. */
@@ -1217,12 +1225,13 @@ cache -> db: Sync
       syncControls(newSrc);
       scheduleRender();
 
-      // Rebuild from new source; the replaced match is gone, cursor stays at same index
+      // Rebuild from new source; the replaced match is gone, cursor stays at same index.
+      // Keep focus in the find bar so the user can keep clicking Replace.
       const prevCursor = matchCursor;
       rebuildMatchList();
 
       if (matchList.length > 0) {
-        goToMatch(prevCursor < matchList.length ? prevCursor : matchList.length - 1);
+        goToMatch(prevCursor < matchList.length ? prevCursor : matchList.length - 1, false);
       } else {
         renderCount();
         showToast('No more matches');
@@ -1256,9 +1265,9 @@ cache -> db: Sync
 
     function openFindBar() {
       findBar.classList.remove('hidden');
+      updateFindCount(); // rebuild + auto-select before focusing find input
       findInput.focus();
       findInput.select();
-      updateFindCount();
     }
 
     function closeFindBar() {
