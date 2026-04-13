@@ -691,6 +691,138 @@
       opacity: 1;
       transform: translateX(-50%) translateY(0);
     }
+
+    /* ── GitHub modals ────────────────────────────────────────────── */
+    .modal-sheet.modal-sheet-tall {
+      max-height: 85vh;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .modal-input {
+      width: 100%;
+      height: 44px;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      padding: 0 14px;
+      font-size: 14px;
+      background: var(--bg);
+      color: var(--text);
+      outline: none;
+      font-family: inherit;
+      -webkit-appearance: none;
+    }
+    .modal-input:focus { border-color: var(--accent); }
+    .modal-input::placeholder { color: var(--muted); }
+
+    .modal-list {
+      list-style: none;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      max-height: 240px;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .modal-list-item {
+      padding: 10px 14px;
+      font-size: 14px;
+      cursor: pointer;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      -webkit-tap-highlight-color: transparent;
+      transition: background .1s;
+      line-height: 1.4;
+    }
+    .modal-list-item:last-child { border-bottom: none; }
+    .modal-list-item:active { background: var(--bg); }
+    .modal-list-item.selected { background: #ededfc; }
+    .modal-list-item .item-icon { flex-shrink: 0; font-size: 13px; opacity: .6; }
+    .modal-list-item .item-sub {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--muted);
+      flex-shrink: 0;
+    }
+    .modal-list-item.item-create { color: var(--accent); font-style: italic; }
+
+    .modal-list-empty {
+      padding: 20px 16px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .modal-selected-path {
+      font-size: 12px;
+      color: var(--accent);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      padding: 4px 2px;
+      min-height: 20px;
+      word-break: break-all;
+    }
+
+    /* Device code display */
+    .gh-device-code {
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: 4px;
+      text-align: center;
+      padding: 16px;
+      background: var(--bg);
+      border-radius: 10px;
+      border: 1.5px solid var(--border);
+      color: var(--accent);
+      user-select: all;
+    }
+
+    .gh-auth-link {
+      display: block;
+      text-align: center;
+      font-size: 14px;
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    /* Checkbox option row */
+    .modal-check-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 2px;
+      font-size: 14px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .modal-check-row input[type=checkbox] { accent-color: var(--accent); width: 18px; height: 18px; flex-shrink: 0; }
+
+    .modal-section-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* Accent modal button */
+    .modal-btn-accent {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+    }
+    .modal-btn-accent:active { background: var(--accent-dk); border-color: var(--accent-dk); }
+    .modal-btn-accent .modal-btn-sub { color: rgba(255,255,255,.7); }
+    .modal-btn-accent:disabled { opacity: .45; cursor: default; transform: none; }
+
+    /* GitHub toolbar button */
+    .editor-toolbar-btn.btn-gh { border-color: #3d4f3d; color: #6db36d; }
+    .editor-toolbar-btn.btn-gh:active { background: #1e2d1e; color: #8ed98e; }
   </style>
 </head>
 <body>
@@ -721,6 +853,12 @@
             <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/>
           </svg>
           Reset
+        </button>
+        <button class="editor-toolbar-btn btn-gh" id="btn-gh-load">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.49.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.605-3.369-1.342-3.369-1.342-.454-1.154-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836a9.59 9.59 0 012.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.202 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.744 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/>
+          </svg>
+          Load from GitHub
         </button>
       </div>
 
@@ -828,6 +966,18 @@
         </div>
       </div>
 
+      <div class="section">
+        <div class="section-title">GitHub</div>
+        <div class="btn-stack">
+          <button class="btn" id="btn-gh-save">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.49.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.605-3.369-1.342-3.369-1.342-.454-1.154-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836a9.59 9.59 0 012.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.202 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.744 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/>
+            </svg>
+            Save to GitHub (create PR)
+          </button>
+        </div>
+      </div>
+
     </div>
 
   </main>
@@ -871,6 +1021,62 @@
     </div>
   </div>
 
+  <!-- GitHub auth modal (Device Flow) -->
+  <div class="modal-overlay hidden" id="modal-gh-auth">
+    <div class="modal-sheet">
+      <div class="modal-title">Connect to GitHub</div>
+      <div class="modal-desc" id="gh-auth-desc">Open the URL below and enter the code to authorise.</div>
+      <div class="gh-device-code" id="gh-device-code">------</div>
+      <a class="gh-auth-link" id="gh-auth-link" href="https://github.com/login/device" target="_blank" rel="noopener">
+        Open github.com/login/device →
+      </a>
+      <div class="modal-desc" id="gh-auth-status">Waiting for authorisation…</div>
+      <button class="modal-btn modal-cancel" id="btn-gh-auth-cancel">Cancel</button>
+    </div>
+  </div>
+
+  <!-- GitHub repo picker modal -->
+  <div class="modal-overlay hidden" id="modal-gh-repo">
+    <div class="modal-sheet modal-sheet-tall">
+      <div class="modal-title">Select Repository</div>
+      <input class="modal-input" id="gh-repo-search" placeholder="Search repos…" type="search"
+        autocomplete="off" spellcheck="false" />
+      <ul class="modal-list" id="gh-repo-list">
+        <li class="modal-list-empty">Loading repositories…</li>
+      </ul>
+      <button class="modal-btn modal-cancel" id="btn-gh-repo-cancel">Cancel</button>
+    </div>
+  </div>
+
+  <!-- GitHub file picker modal (load + save) -->
+  <div class="modal-overlay hidden" id="modal-gh-file">
+    <div class="modal-sheet modal-sheet-tall">
+      <div class="modal-title" id="gh-file-modal-title">Select D2 File</div>
+      <div class="modal-desc" id="gh-file-modal-desc"></div>
+      <input class="modal-input" id="gh-file-search" placeholder="Filter or type a new path…" type="text"
+        autocomplete="off" spellcheck="false" autocorrect="off" autocapitalize="off" />
+      <ul class="modal-list" id="gh-file-list">
+        <li class="modal-list-empty">Loading…</li>
+      </ul>
+      <div class="modal-selected-path" id="gh-file-selected-label"></div>
+      <!-- Save-only options -->
+      <div id="gh-save-options" style="display:none; flex-direction:column; gap:4px;">
+        <div class="modal-section-label">Also upload to repo</div>
+        <label class="modal-check-row">
+          <input type="checkbox" id="gh-save-png" checked /> PNG (adjacent to .d2 file)
+        </label>
+        <label class="modal-check-row">
+          <input type="checkbox" id="gh-save-svg" /> SVG (adjacent to .d2 file)
+        </label>
+      </div>
+      <button class="modal-btn modal-btn-accent" id="btn-gh-file-confirm" disabled>
+        Confirm
+        <span class="modal-btn-sub" id="gh-file-confirm-sub"></span>
+      </button>
+      <button class="modal-btn modal-cancel" id="btn-gh-file-cancel">Cancel</button>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script type="module">
@@ -909,6 +1115,20 @@ cache -> db: Sync
     let currentSvg = '';     // Last successfully rendered SVG string
     let renderTimer = null;
     let rendering   = false;
+
+    // ─── GitHub state ─────────────────────────────────────────────────────────
+
+    // Replace with your GitHub OAuth App client_id (Device Flow must be enabled)
+    const GH_CLIENT_ID  = 'YOUR_OAUTH_APP_CLIENT_ID';
+    const GH_LS_TOKEN   = 'gh-token';
+    const GH_LS_CONTEXT = 'gh-file-context';
+
+    let ghToken   = localStorage.getItem(GH_LS_TOKEN) || null;
+    // shape: { owner, repo, path, sha, branch } | null
+    let ghContext = (() => {
+      try { return JSON.parse(localStorage.getItem(GH_LS_CONTEXT)); } catch { return null; }
+    })();
+    let ghAllRepos = [];  // cached repo list
 
     // ─── DOM refs ─────────────────────────────────────────────────────────────
 
@@ -1665,6 +1885,571 @@ cache -> db: Sync
     document.getElementById('btn-example').addEventListener('click', () => {
       applyReset(DEFAULT_SOURCE, 'Reset to example');
     });
+
+    // ─── GitHub: API helper ───────────────────────────────────────────────────
+
+    async function ghFetch(path, options = {}) {
+      const url = path.startsWith('http') ? path : `https://api.github.com${path}`;
+      const res = await fetch(url, {
+        ...options,
+        headers: {
+          'Accept': 'application/vnd.github+json',
+          'Authorization': `Bearer ${ghToken}`,
+          'X-GitHub-Api-Version': '2022-11-28',
+          ...(options.headers || {}),
+        },
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.message || `GitHub API error ${res.status}`);
+      }
+      return res.json();
+    }
+
+    // ─── GitHub: Auth persistence ─────────────────────────────────────────────
+
+    function ghSaveToken(token) {
+      ghToken = token;
+      try { localStorage.setItem(GH_LS_TOKEN, token); } catch (_) {}
+    }
+
+    function ghClearToken() {
+      ghToken = null;
+      try { localStorage.removeItem(GH_LS_TOKEN); } catch (_) {}
+    }
+
+    function ghSaveContext(ctx) {
+      ghContext = ctx;
+      try { localStorage.setItem(GH_LS_CONTEXT, JSON.stringify(ctx)); } catch (_) {}
+    }
+
+    // ─── GitHub: Device Flow auth ─────────────────────────────────────────────
+
+    async function ghStartDeviceFlow() {
+      const res = await fetch('https://github.com/login/device/code', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client_id: GH_CLIENT_ID, scope: 'repo' }),
+      });
+      if (!res.ok) throw new Error('Failed to start device flow');
+      return res.json();
+    }
+
+    async function ghPollDeviceFlow(deviceCode) {
+      const res = await fetch('https://github.com/login/oauth/access_token', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_id: GH_CLIENT_ID,
+          device_code: deviceCode,
+          grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+        }),
+      });
+      return res.json();
+    }
+
+    /** Opens the auth modal, runs Device Flow, resolves with access token or rejects. */
+    function ghAuthenticate() {
+      return new Promise(async (resolve, reject) => {
+        const authModal  = document.getElementById('modal-gh-auth');
+        const codeEl     = document.getElementById('gh-device-code');
+        const statusEl   = document.getElementById('gh-auth-status');
+        const cancelBtn  = document.getElementById('btn-gh-auth-cancel');
+
+        let cancelled  = false;
+        let pollHandle = null;
+
+        function cleanup() {
+          clearInterval(pollHandle);
+          authModal.classList.add('hidden');
+          cancelBtn.removeEventListener('click', onCancel);
+          authModal.removeEventListener('click', onBackdrop);
+        }
+        function onCancel() { cancelled = true; cleanup(); reject(new Error('Cancelled')); }
+        function onBackdrop(e) { if (e.target === authModal) onCancel(); }
+
+        cancelBtn.addEventListener('click', onCancel);
+        authModal.addEventListener('click', onBackdrop);
+        authModal.classList.remove('hidden');
+        codeEl.textContent = '------';
+        statusEl.textContent = 'Starting…';
+
+        try {
+          const flow = await ghStartDeviceFlow();
+          codeEl.textContent = flow.user_code;
+          document.getElementById('gh-auth-link').href = flow.verification_uri;
+          document.getElementById('gh-auth-desc').textContent =
+            `Go to ${flow.verification_uri} and enter this code:`;
+          statusEl.textContent = 'Waiting for authorisation…';
+
+          let pollInterval = (flow.interval || 5) * 1000;
+
+          pollHandle = setInterval(async () => {
+            if (cancelled) return;
+            try {
+              const result = await ghPollDeviceFlow(flow.device_code);
+              if (result.access_token) {
+                cleanup();
+                ghSaveToken(result.access_token);
+                resolve(result.access_token);
+              } else if (result.error === 'slow_down') {
+                pollInterval += 5000;
+              } else if (result.error === 'expired_token') {
+                cleanup();
+                reject(new Error('Code expired — please try again'));
+              }
+              // 'authorization_pending' → keep polling
+            } catch (_) { /* network error, keep polling */ }
+          }, pollInterval);
+
+        } catch (err) {
+          cleanup();
+          reject(err);
+        }
+      });
+    }
+
+    /** Ensures a valid token. Validates existing token or triggers auth flow. */
+    async function ghEnsureAuth() {
+      if (ghToken) {
+        try { await ghFetch('/user'); return ghToken; } catch { ghClearToken(); }
+      }
+      return ghAuthenticate();
+    }
+
+    // ─── GitHub: Repo browser ─────────────────────────────────────────────────
+
+    /** Fuzzy match: all chars of query appear in str in order (case-insensitive). */
+    function fuzzyMatch(str, query) {
+      if (!query) return true;
+      str = str.toLowerCase();
+      query = query.toLowerCase();
+      let si = 0;
+      for (let qi = 0; qi < query.length; qi++) {
+        const idx = str.indexOf(query[qi], si);
+        if (idx < 0) return false;
+        si = idx + 1;
+      }
+      return true;
+    }
+
+    async function ghFetchAllRepos() {
+      const repos = [];
+      let page = 1;
+      while (true) {
+        const batch = await ghFetch(`/user/repos?per_page=100&page=${page}&sort=pushed&type=all`);
+        repos.push(...batch);
+        if (batch.length < 100) break;
+        page++;
+      }
+      ghAllRepos = repos;
+      return repos;
+    }
+
+    function ghRenderRepoList(filter) {
+      const listEl = document.getElementById('gh-repo-list');
+      const items  = ghAllRepos.filter(r => fuzzyMatch(r.full_name, filter));
+      if (!items.length) {
+        listEl.innerHTML = `<li class="modal-list-empty">${filter ? 'No matching repos' : 'No repos found'}</li>`;
+        return;
+      }
+      listEl.innerHTML = items.map(r => `
+        <li class="modal-list-item"
+            data-full="${escHtml(r.full_name)}"
+            data-owner="${escHtml(r.owner.login)}"
+            data-repo="${escHtml(r.name)}"
+            data-branch="${escHtml(r.default_branch)}">
+          <span class="item-icon">${r.private ? '🔒' : '📁'}</span>
+          <span>${escHtml(r.full_name)}</span>
+          <span class="item-sub">${escHtml(r.default_branch)}</span>
+        </li>`).join('');
+    }
+
+    /** Opens repo picker. Resolves with {owner, repo, defaultBranch} or rejects. */
+    function ghPickRepo() {
+      return new Promise(async (resolve, reject) => {
+        const modal     = document.getElementById('modal-gh-repo');
+        const searchEl  = document.getElementById('gh-repo-search');
+        const listEl    = document.getElementById('gh-repo-list');
+        const cancelBtn = document.getElementById('btn-gh-repo-cancel');
+
+        function cleanup() {
+          modal.classList.add('hidden');
+          searchEl.removeEventListener('input', onSearch);
+          listEl.removeEventListener('click', onItemClick);
+          cancelBtn.removeEventListener('click', onCancel);
+          modal.removeEventListener('click', onBackdrop);
+        }
+        function onCancel() { cleanup(); reject(new Error('Cancelled')); }
+        function onBackdrop(e) { if (e.target === modal) onCancel(); }
+        function onSearch() { ghRenderRepoList(searchEl.value.trim()); }
+        function onItemClick(e) {
+          const li = e.target.closest('.modal-list-item');
+          if (!li) return;
+          cleanup();
+          resolve({ owner: li.dataset.owner, repo: li.dataset.repo, defaultBranch: li.dataset.branch });
+        }
+
+        cancelBtn.addEventListener('click', onCancel);
+        modal.addEventListener('click', onBackdrop);
+        searchEl.addEventListener('input', onSearch);
+        listEl.addEventListener('click', onItemClick);
+
+        searchEl.value = '';
+        listEl.innerHTML = '<li class="modal-list-empty">Loading repositories…</li>';
+        modal.classList.remove('hidden');
+
+        try {
+          await ghFetchAllRepos();
+          ghRenderRepoList('');
+          searchEl.focus();
+        } catch (err) {
+          listEl.innerHTML = `<li class="modal-list-empty">Error: ${escHtml(err.message)}</li>`;
+        }
+      });
+    }
+
+    // ─── GitHub: File tree browser ────────────────────────────────────────────
+
+    async function ghFetchTree(owner, repo, branch) {
+      const branchData = await ghFetch(`/repos/${owner}/${repo}/branches/${branch}`);
+      const treeSha    = branchData.commit.commit.tree.sha;
+      const treeData   = await ghFetch(`/repos/${owner}/${repo}/git/trees/${treeSha}?recursive=1`);
+      return treeData.tree || [];
+    }
+
+    /**
+     * Opens the file picker.
+     * mode: 'load' | 'save'
+     * Resolves with { path, sha, saveOptions } or rejects.
+     */
+    function ghPickFile(owner, repo, defaultBranch, mode, prefillPath = '') {
+      return new Promise(async (resolve, reject) => {
+        const modal       = document.getElementById('modal-gh-file');
+        const titleEl     = document.getElementById('gh-file-modal-title');
+        const descEl      = document.getElementById('gh-file-modal-desc');
+        const searchEl    = document.getElementById('gh-file-search');
+        const listEl      = document.getElementById('gh-file-list');
+        const saveOpts    = document.getElementById('gh-save-options');
+        const selectedLbl = document.getElementById('gh-file-selected-label');
+        const confirmBtn  = document.getElementById('btn-gh-file-confirm');
+        const confirmSub  = document.getElementById('gh-file-confirm-sub');
+        const cancelBtn   = document.getElementById('btn-gh-file-cancel');
+
+        let allBlobs = [];   // { path, sha } for every file in repo
+        let allDirs  = [];   // unique directory paths (without trailing /)
+        let d2Files  = [];   // { path, sha } for .d2 files only
+        let selectedPath = '';
+        let selectedSha  = null;
+
+        titleEl.textContent = mode === 'load' ? 'Select D2 File' : 'Save D2 File';
+        descEl.textContent  = `${owner}/${repo} (${defaultBranch})`;
+        saveOpts.style.display = mode === 'save' ? 'flex' : 'none';
+        confirmBtn.textContent = mode === 'load' ? 'Load File' : 'Save as PR';
+        confirmBtn.appendChild(Object.assign(document.createElement('span'), {
+          className: 'modal-btn-sub', id: 'gh-file-confirm-sub'
+        }));
+        confirmBtn.disabled = true;
+        confirmSub.textContent = '';
+        selectedLbl.textContent = '';
+        searchEl.value = prefillPath;
+
+        function setSelection(path, sha) {
+          selectedPath = path;
+          selectedSha  = sha;
+          selectedLbl.textContent = path || '';
+          document.getElementById('gh-file-confirm-sub').textContent = path ? path : '';
+          confirmBtn.disabled = !path;
+        }
+
+        function renderList(filter) {
+          const trimmed = filter.trim();
+          const lower   = trimmed.toLowerCase();
+
+          // Determine if user is drilling into a directory prefix
+          const dirPrefix = trimmed.endsWith('/') ? trimmed : '';
+
+          let items = []; // { type: 'dir'|'file'|'create', path, sha }
+
+          if (dirPrefix) {
+            // Show everything under this directory
+            const childDirs = [...new Set(
+              allBlobs
+                .filter(b => b.path.startsWith(dirPrefix))
+                .map(b => {
+                  const rest = b.path.slice(dirPrefix.length);
+                  const slash = rest.indexOf('/');
+                  return slash >= 0 ? dirPrefix + rest.slice(0, slash) : null;
+                })
+                .filter(Boolean)
+            )];
+            const childFiles = allBlobs.filter(b =>
+              b.path.startsWith(dirPrefix) && !b.path.slice(dirPrefix.length).includes('/')
+            );
+            childDirs.forEach(d => items.push({ type: 'dir', path: d + '/', sha: null }));
+            childFiles
+              .filter(b => b.path.endsWith('.d2'))
+              .forEach(b => items.push({ type: 'file', path: b.path, sha: b.sha }));
+          } else if (trimmed) {
+            // Fuzzy match directories + .d2 files
+            allDirs
+              .filter(d => fuzzyMatch(d, lower))
+              .forEach(d => items.push({ type: 'dir', path: d + '/', sha: null }));
+            d2Files
+              .filter(f => fuzzyMatch(f.path, lower))
+              .forEach(f => items.push({ type: 'file', path: f.path, sha: f.sha }));
+
+            // "Create new file" entry at bottom — only in save mode
+            if (mode === 'save') {
+              const exactMatch = d2Files.some(f => f.path === trimmed || f.path === trimmed + '.d2');
+              if (!exactMatch) {
+                const createPath = trimmed.endsWith('.d2') ? trimmed : trimmed + '.d2';
+                items.push({ type: 'create', path: createPath, sha: null });
+              }
+            }
+          } else {
+            // Empty filter: show top-level dirs then all .d2 files
+            const topDirs = [...new Set(
+              allBlobs.map(b => { const slash = b.path.indexOf('/'); return slash >= 0 ? b.path.slice(0, slash) : null; }).filter(Boolean)
+            )];
+            topDirs.forEach(d => items.push({ type: 'dir', path: d + '/', sha: null }));
+            d2Files.forEach(f => items.push({ type: 'file', path: f.path, sha: f.sha }));
+          }
+
+          if (!items.length) {
+            listEl.innerHTML = `<li class="modal-list-empty">${trimmed ? 'No matches' : 'No files found'}</li>`;
+            return;
+          }
+
+          listEl.innerHTML = items.map(item => {
+            let icon, label, cls = 'modal-list-item';
+            if (item.type === 'dir') {
+              icon = '📁'; label = escHtml(item.path);
+            } else if (item.type === 'create') {
+              icon = '✨'; label = `Create: ${escHtml(item.path)}`; cls += ' item-create';
+            } else {
+              icon = '📄'; label = escHtml(item.path);
+              if (item.path === selectedPath) cls += ' selected';
+            }
+            return `<li class="${cls}" data-path="${escHtml(item.path)}" data-sha="${item.sha || ''}" data-type="${item.type}">
+              <span class="item-icon">${icon}</span><span>${label}</span></li>`;
+          }).join('');
+        }
+
+        function cleanup() {
+          modal.classList.add('hidden');
+          searchEl.removeEventListener('input', onSearch);
+          listEl.removeEventListener('click', onItemClick);
+          confirmBtn.removeEventListener('click', onConfirm);
+          cancelBtn.removeEventListener('click', onCancel);
+          modal.removeEventListener('click', onBackdrop);
+        }
+        function onCancel() { cleanup(); reject(new Error('Cancelled')); }
+        function onBackdrop(e) { if (e.target === modal) onCancel(); }
+
+        function onSearch() {
+          const v = searchEl.value;
+          renderList(v);
+          // If user is typing a free path and it ends in .d2, treat as tentative selection
+          const trimmed = v.trim();
+          if (trimmed.endsWith('.d2') && mode === 'save') {
+            const existing = d2Files.find(f => f.path === trimmed);
+            setSelection(trimmed, existing ? existing.sha : null);
+          } else if (!trimmed) {
+            setSelection('', null);
+          }
+        }
+
+        function onItemClick(e) {
+          const li = e.target.closest('.modal-list-item');
+          if (!li) return;
+          const { path, sha, type } = li.dataset;
+          if (type === 'dir') {
+            // Drill into directory
+            searchEl.value = path;
+            renderList(path);
+            setSelection('', null);
+            searchEl.focus();
+          } else if (type === 'file') {
+            setSelection(path, sha || null);
+            renderList(searchEl.value);
+          } else if (type === 'create') {
+            setSelection(path, null);
+            searchEl.value = path;
+            renderList(path);
+          }
+        }
+
+        function onConfirm() {
+          if (!selectedPath) return;
+          let finalPath = selectedPath;
+          if (!finalPath.endsWith('.d2')) finalPath += '.d2';
+          cleanup();
+          resolve({
+            path: finalPath,
+            sha: selectedSha,
+            saveOptions: mode === 'save' ? {
+              png: document.getElementById('gh-save-png').checked,
+              svg: document.getElementById('gh-save-svg').checked,
+            } : null,
+          });
+        }
+
+        cancelBtn.addEventListener('click', onCancel);
+        modal.addEventListener('click', onBackdrop);
+        searchEl.addEventListener('input', onSearch);
+        listEl.addEventListener('click', onItemClick);
+        confirmBtn.addEventListener('click', onConfirm);
+
+        listEl.innerHTML = '<li class="modal-list-empty">Loading files…</li>';
+        modal.classList.remove('hidden');
+
+        try {
+          const tree = await ghFetchTree(owner, repo, defaultBranch);
+          allBlobs = tree.filter(item => item.type === 'blob').map(item => ({ path: item.path, sha: item.sha }));
+          d2Files  = allBlobs.filter(b => b.path.endsWith('.d2'));
+          allDirs  = [...new Set(
+            allBlobs.map(b => { const parts = b.path.split('/'); parts.pop(); return parts.join('/'); }).filter(Boolean)
+          )].sort();
+
+          // Pre-select prefill path if it matches an existing file
+          if (prefillPath) {
+            const existing = d2Files.find(f => f.path === prefillPath);
+            setSelection(prefillPath, existing ? existing.sha : null);
+          }
+
+          renderList(searchEl.value);
+          searchEl.focus();
+        } catch (err) {
+          listEl.innerHTML = `<li class="modal-list-empty">Error: ${escHtml(err.message)}</li>`;
+        }
+      });
+    }
+
+    // ─── GitHub: Load flow ────────────────────────────────────────────────────
+
+    async function ghLoadFlow() {
+      try {
+        await ghEnsureAuth();
+        const { owner, repo, defaultBranch } = await ghPickRepo();
+        const { path } = await ghPickFile(owner, repo, defaultBranch, 'load');
+
+        showToast('Loading file…');
+        const fileData = await ghFetch(`/repos/${owner}/${repo}/contents/${path}`);
+        const content  = decodeURIComponent(escape(atob(fileData.content.replace(/\s/g, ''))));
+
+        pushUndo();
+        editor.value = content;
+        commitSnap();
+        saveSource(content);
+        syncControls(content);
+        scheduleRender();
+
+        ghSaveContext({ owner, repo, path, sha: fileData.sha, branch: defaultBranch });
+        showToast(`Loaded ${path}`);
+      } catch (err) {
+        if (err.message !== 'Cancelled') showToast('Load failed: ' + err.message);
+      }
+    }
+
+    document.getElementById('btn-gh-load').addEventListener('click', ghLoadFlow);
+
+    // ─── GitHub: Save flow (creates PR) ──────────────────────────────────────
+
+    async function ghSaveFlow() {
+      if (!currentSvg) {
+        showToast('No diagram — switch to Preview first to render it');
+        return;
+      }
+      try {
+        await ghEnsureAuth();
+
+        let owner, repo, defaultBranch;
+        if (ghContext) {
+          ({ owner, repo, branch: defaultBranch } = ghContext);
+        } else {
+          ({ owner, repo, defaultBranch } = await ghPickRepo());
+        }
+
+        const prefill = ghContext?.path || '';
+        const { path: d2Path, sha: existingSha, saveOptions } =
+          await ghPickFile(owner, repo, defaultBranch, 'save', prefill);
+
+        // Derive adjacent filenames (strip trailing .d2, replace extension)
+        const base    = d2Path.replace(/\.d2$/, '');
+        const pngPath = base + '.png';
+        const svgPath = base + '.svg';
+
+        // Create a timestamped branch name
+        const ts         = new Date().toISOString().replace(/\D/g, '').slice(0, 15);
+        const branchName = `ghd2-${ts}`;
+
+        showToast('Creating branch…');
+        const branchData = await ghFetch(`/repos/${owner}/${repo}/branches/${defaultBranch}`);
+        const headSha    = branchData.commit.sha;
+
+        await ghFetch(`/repos/${owner}/${repo}/git/refs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ref: `refs/heads/${branchName}`, sha: headSha }),
+        });
+
+        async function putFile(filePath, contentBase64, message, fileSha = null) {
+          const body = { message, content: contentBase64, branch: branchName };
+          if (fileSha) body.sha = fileSha;
+          await ghFetch(`/repos/${owner}/${repo}/contents/${encodeURIComponent(filePath).replace(/%2F/g, '/')}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+        }
+
+        showToast('Uploading files…');
+
+        // Upload D2 source (Unicode-safe base64)
+        const d2Base64 = btoa(unescape(encodeURIComponent(editor.value)));
+        await putFile(d2Path, d2Base64, `Update ${d2Path} via D2 Editor`, existingSha);
+
+        if (saveOptions.png) {
+          const pngBlob   = await svgToPngBlob(currentSvg);
+          const pngBuf    = await pngBlob.arrayBuffer();
+          const pngArr    = new Uint8Array(pngBuf);
+          const chunks    = [];
+          for (let i = 0; i < pngArr.length; i += 8192)
+            chunks.push(String.fromCharCode(...pngArr.slice(i, i + 8192)));
+          await putFile(pngPath, btoa(chunks.join('')), `Add PNG export for ${d2Path}`);
+        }
+
+        if (saveOptions.svg) {
+          const svgBase64 = btoa(unescape(encodeURIComponent(currentSvg)));
+          await putFile(svgPath, svgBase64, `Add SVG export for ${d2Path}`);
+        }
+
+        showToast('Creating PR…');
+        const formatList = ['D2 source'];
+        if (saveOptions.png) formatList.push('PNG');
+        if (saveOptions.svg) formatList.push('SVG');
+
+        const prData = await ghFetch(`/repos/${owner}/${repo}/pulls`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: `Update ${d2Path}`,
+            body: `Updated via [D2 Editor](${location.href})\n\nFiles saved: ${formatList.join(', ')}`,
+            head: branchName,
+            base: defaultBranch,
+          }),
+        });
+
+        ghSaveContext({ owner, repo, path: d2Path, sha: null, branch: defaultBranch });
+        showToast('PR created!');
+        window.open(prData.html_url, '_blank', 'noopener');
+      } catch (err) {
+        if (err.message !== 'Cancelled') showToast('Save failed: ' + err.message);
+      }
+    }
+
+    document.getElementById('btn-gh-save').addEventListener('click', ghSaveFlow);
 
     // ─── Init ─────────────────────────────────────────────────────────────────
 
