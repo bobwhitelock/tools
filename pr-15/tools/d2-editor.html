@@ -514,6 +514,25 @@
       background: white;
     }
 
+    /* Edit mode (direct manipulation of the preview) */
+    .preview-area.edit-mode { cursor: crosshair; }
+    .preview-area.edit-mode svg g[data-d2key] { cursor: pointer; }
+    .preview-area.edit-mode svg g[data-d2key].d2-hover .shape > *,
+    .preview-area.edit-mode svg g[data-d2key].d2-hover > rect,
+    .preview-area.edit-mode svg g[data-d2key].d2-hover > path {
+      stroke: #5b5bd6 !important; stroke-width: 3 !important;
+    }
+    /* Small key readout shown while hovering a node in edit mode */
+    .d2-key-readout {
+      position: absolute; top: 8px; left: 8px; z-index: 5;
+      background: #1f2330; color: #c9d1d9;
+      font: 12px/1.4 'SF Mono','Fira Code',Consolas,monospace;
+      padding: 4px 8px; border-radius: 6px; border: 1px solid #30363d;
+      pointer-events: none; max-width: 80%; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; display: none;
+    }
+    .preview-area.edit-mode .d2-key-readout.show { display: block; }
+
     .preview-empty {
       margin-top: 60px;
       text-align: center;
@@ -1016,12 +1035,21 @@
             <span class="toggle-track"></span>
           </span>
         </label>
+        <div class="ctrl-divider"></div>
+        <label class="toggle-wrap" title="Edit mode — hover/drag elements in the preview to edit the source">
+          <span class="ctrl-label">Edit</span>
+          <span class="toggle">
+            <input type="checkbox" id="edit-toggle" />
+            <span class="toggle-track"></span>
+          </span>
+        </label>
       </div>
       <div class="preview-area" id="preview-area">
         <div class="spin-wrap" id="spinner">
           <div class="spinner"></div>
           <span class="spin-text">Rendering…</span>
         </div>
+        <div class="d2-key-readout" id="d2-key-readout"></div>
         <div id="preview-content"></div>
       </div>
     </div>
@@ -1231,6 +1259,8 @@ cache -> db: Sync
     let currentSvg = '';     // Last successfully rendered SVG string
     let renderTimer = null;
     let rendering   = false;
+    let lastCompiled = null; // Last successful d2.compile() result (graph + diagram)
+    let editMode    = false; // Direct-manipulation (preview editing) mode
 
     // ─── GitHub state ─────────────────────────────────────────────────────────
 
@@ -1251,7 +1281,10 @@ cache -> db: Sync
     const editorHl      = document.getElementById('editor-hl');
     const layoutSelect  = document.getElementById('layout-select');
     const sketchToggle  = document.getElementById('sketch-toggle');
+    const editToggle    = document.getElementById('edit-toggle');
+    const previewArea   = document.getElementById('preview-area');
     const previewContent= document.getElementById('preview-content');
+    const keyReadout    = document.getElementById('d2-key-readout');
     const spinnerEl     = document.getElementById('spinner');
     const statusDot     = document.getElementById('status-dot');
     const statusText    = document.getElementById('status-text');
@@ -1412,6 +1445,7 @@ cache -> db: Sync
         const compiled = await d2.compile(source);
         const svg = await d2.render(compiled.diagram, compiled.renderOptions);
         currentSvg = svg;
+        lastCompiled = compiled;
         previewContent.innerHTML = svg;
         // Make SVG responsive
         const svgEl = previewContent.querySelector('svg');
@@ -1421,6 +1455,7 @@ cache -> db: Sync
           svgEl.style.width  = '100%';
           svgEl.style.height = 'auto';
         }
+        tagShapeGroups(svgEl, compiled);  // annotate SVG nodes with their source keys
         setStatus('ready', 'Ready');
       } catch (err) {
         const msg = (err && err.message) ? err.message : String(err);
@@ -1959,6 +1994,101 @@ cache -> db: Sync
 
     layoutSelect.addEventListener('change', applyAndRender);
     sketchToggle.addEventListener('change', applyAndRender);
+
+    // ─── Direct manipulation (edit the preview) ───────────────────────────────
+    //
+    // D2's SVG wraps each shape/connection <g> with class="base64url(id)" (no
+    // plain id attribute). We decode those classes back to the source key and
+    // stash it on the element as data-d2key, validated against the compiled
+    // graph's object ids. Increment 1 just proves this mapping by highlighting
+    // the hovered node and showing its key; later increments add drag editing.
+
+    /** Decode a base64url token (D2 SVG class) back to a string, or null. */
+    function decodeB64Url(token) {
+      try {
+        let b64 = token.replace(/-/g, '+').replace(/_/g, '/');
+        while (b64.length % 4) b64 += '=';
+        // D2 base64-encodes EscapeText(id); decode bytes as UTF-8.
+        const bin = atob(b64);
+        const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+        return new TextDecoder().decode(bytes);
+      } catch { return null; }
+    }
+
+    /** Undo the minimal XML escaping D2's EscapeText applies. */
+    function unescapeXml(s) {
+      return s.replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+              .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+              .replace(/&amp;/g, '&');
+    }
+
+    /**
+     * Walk the rendered SVG and tag every <g> whose class decodes to a known
+     * object id with data-d2key="<source key>". Returns the count tagged.
+     */
+    function tagShapeGroups(svgEl, compiled) {
+      if (!svgEl || !compiled) return 0;
+      // The SVG base64-encodes each element's absolute id, which matches the
+      // d2target diagram's shape/connection ids (e.g. "network.cell tower",
+      // "(a -> b)[0]"). Use those as the authoritative valid-key set.
+      const d = compiled.diagram || {};
+      const shapeIds = new Set((d.shapes || []).filter(Boolean).map(s => s.id));
+      const connIds  = new Set((d.connections || []).filter(Boolean).map(c => c.id));
+      let tagged = 0;
+      for (const g of svgEl.querySelectorAll('g[class]')) {
+        // A shape/connection group's class is a single base64url token; the
+        // inner "shape" group and text groups have human-readable classes.
+        const cls = g.getAttribute('class').trim();
+        if (!cls || /\s/.test(cls) || cls === 'shape') continue;
+        const decoded = decodeB64Url(cls);
+        if (decoded == null) continue;
+        const key = unescapeXml(decoded);
+        if (shapeIds.has(key)) { g.dataset.d2key = key; g.dataset.d2kind = 'shape'; tagged++; }
+        else if (connIds.has(key)) { g.dataset.d2key = key; g.dataset.d2kind = 'conn'; tagged++; }
+      }
+      return tagged;
+    }
+
+    function nodeFromPoint(target) {
+      return target && target.closest ? target.closest('g[data-d2key]') : null;
+    }
+
+    function clearHover() {
+      previewContent.querySelectorAll('g[data-d2key].d2-hover')
+        .forEach(g => g.classList.remove('d2-hover'));
+      keyReadout.classList.remove('show');
+    }
+
+    function setEditMode(on) {
+      editMode = on;
+      previewArea.classList.toggle('edit-mode', on);
+      if (!on) clearHover();
+    }
+
+    editToggle.addEventListener('change', () => setEditMode(editToggle.checked));
+
+    // Delegated hover handling — listeners live on the persistent container
+    // because the inner SVG is replaced on every render.
+    previewContent.addEventListener('pointermove', (e) => {
+      if (!editMode) return;
+      const g = nodeFromPoint(e.target);
+      if (!g) { clearHover(); return; }
+      if (!g.classList.contains('d2-hover')) {
+        clearHover();
+        g.classList.add('d2-hover');
+      }
+      keyReadout.textContent = g.dataset.d2key;
+      keyReadout.classList.add('show');
+    });
+    previewContent.addEventListener('pointerleave', () => { if (editMode) clearHover(); });
+
+    // Increment-1 checkpoint: clicking a node reports the resolved key, so we can
+    // confirm the SVG→source mapping is correct before building edit operations.
+    previewContent.addEventListener('click', (e) => {
+      if (!editMode) return;
+      const g = nodeFromPoint(e.target);
+      if (g) showToast('Element key: ' + g.dataset.d2key);
+    });
 
     // ─── Export helpers ───────────────────────────────────────────────────────
 
