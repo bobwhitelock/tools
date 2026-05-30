@@ -805,6 +805,116 @@
     .gh-pr-link:active { background: #eaeaf9; }
     .gh-pr-link .btn-icon { color: var(--accent); }
     .gh-pr-link.hidden { display: none; }
+
+    /* ── Desktop-only elements (hidden on mobile) ─── */
+    .desktop-only    { display: none; }
+    .manage-header   { display: none; justify-content: flex-end; margin-bottom: 8px; flex-shrink: 0; }
+    .manage-backdrop { display: none; position: fixed; inset: 0; z-index: 99; }
+
+    /* ── Header compact desktop button ─────────────── */
+    .hdr-btn {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      height: 28px;
+      padding: 0 10px;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      background: transparent;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background .12s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .hdr-btn:hover { background: var(--bg); }
+    .hdr-btn svg { width: 13px; height: 13px; flex-shrink: 0; }
+
+    /* ── Manage panel close button ──────────────────── */
+    .manage-close-btn {
+      width: 26px;
+      height: 26px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background .12s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .manage-close-btn:hover { background: var(--bg); color: var(--text); }
+
+    /* ── Desktop layout (≥768px) ────────────────────── */
+    @media (min-width: 768px) {
+      .desktop-only  { display: flex; }
+      .manage-header { display: flex; }
+      .manage-backdrop { display: block; }
+      .manage-backdrop.hidden { display: none; }
+      .tab-bar { display: none; }
+      .toast   { bottom: 20px; }
+
+      /* Slightly more compact header */
+      .hdr { padding: 0 20px; gap: 8px; }
+      .hdr-title { font-size: 15px; }
+
+      /* Side-by-side editor + preview */
+      .main { display: flex; flex-direction: row; }
+
+      .panel {
+        position: relative;
+        inset: auto;
+        flex: 1;
+        min-width: 0;
+      }
+
+      /* Always-visible panels on desktop */
+      #panel-editor  { display: flex !important; border-right: 1px solid #313244; }
+      #panel-preview { display: flex !important; }
+
+      /* Manage panel: fixed right-side overlay */
+      #panel-manage {
+        position: fixed;
+        top: var(--hdr-h);
+        right: 0;
+        bottom: 0;
+        width: 260px;
+        flex: none;
+        background: var(--surface);
+        border-left: 1px solid var(--border);
+        box-shadow: -6px 0 20px rgba(0,0,0,.1);
+        z-index: 100;
+        padding: 12px 14px 20px;
+        display: none;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      #panel-manage.active { display: flex; }
+
+      /* Compact editor toolbar */
+      .editor-toolbar { padding: 4px 8px; gap: 6px; }
+      .editor-toolbar-btn { padding: 4px 9px; font-size: 11px; }
+      .editor-toolbar-btn svg { width: 13px; height: 13px; }
+
+      /* Compact preview controls */
+      .preview-controls { padding: 7px 12px; gap: 8px; }
+      .ctrl-select { height: 30px; font-size: 13px; }
+      .ctrl-label { font-size: 11px; }
+      .toggle { width: 36px; height: 20px; }
+      .toggle-track::after { width: 14px; height: 14px; }
+      .toggle input:checked + .toggle-track::after { transform: translateX(16px); }
+
+      /* Compact manage panel buttons */
+      .btn { min-height: 40px; font-size: 13px; padding: 0 14px; border-radius: 10px; gap: 10px; }
+      .btn-icon { width: 18px; height: 18px; }
+      .section { margin-bottom: 20px; }
+    }
   </style>
 </head>
 <body>
@@ -812,6 +922,12 @@
   <!-- Header -->
   <header class="hdr">
     <span class="hdr-title">D2 Editor</span>
+    <button class="hdr-btn desktop-only" id="btn-desktop-export">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      Export
+    </button>
     <span class="hdr-status">
       <span class="hdr-status-dot loading" id="status-dot"></span>
       <span id="status-text">Loading…</span>
@@ -912,6 +1028,9 @@
 
     <!-- Manage -->
     <div id="panel-manage" class="panel">
+      <div class="manage-header">
+        <button class="manage-close-btn" id="btn-manage-close" title="Close">×</button>
+      </div>
       <div class="section">
         <div class="section-title">Source</div>
         <div class="btn-stack">
@@ -970,6 +1089,9 @@
     </div>
 
   </main>
+
+  <!-- Desktop manage panel backdrop -->
+  <div class="manage-backdrop hidden" id="manage-backdrop"></div>
 
   <!-- Tab bar -->
   <nav class="tab-bar">
@@ -1918,13 +2040,13 @@ cache -> db: Sync
     });
 
     document.getElementById('btn-download-svg').addEventListener('click', () => {
-      if (!currentSvg) { showToast('No diagram yet — switch to Preview first'); return; }
+      if (!currentSvg) { showToast('No diagram yet — wait for render to complete'); return; }
       download(currentSvg, 'diagram.svg', 'image/svg+xml');
       showToast('Downloaded diagram.svg');
     });
 
     document.getElementById('btn-download-png').addEventListener('click', async () => {
-      if (!currentSvg) { showToast('No diagram yet — switch to Preview first'); return; }
+      if (!currentSvg) { showToast('No diagram yet — wait for render to complete'); return; }
       try {
         const blob = await svgToPngBlob(currentSvg);
         const url  = URL.createObjectURL(blob);
@@ -2413,7 +2535,7 @@ cache -> db: Sync
 
     async function ghSaveFlow() {
       if (!currentSvg) {
-        showToast('No diagram — switch to Preview first to render it');
+        showToast('No diagram yet — wait for render to complete');
         return;
       }
       try {
@@ -2513,6 +2635,39 @@ cache -> db: Sync
     }
 
     document.getElementById('btn-gh-save').addEventListener('click', ghSaveFlow);
+
+    // ─── Desktop manage panel ─────────────────────────────────────────────────
+
+    const desktopExportBtn = document.getElementById('btn-desktop-export');
+    const manageBackdrop   = document.getElementById('manage-backdrop');
+    const managePanel      = document.getElementById('panel-manage');
+    const manageCloseBtn   = document.getElementById('btn-manage-close');
+
+    function openManagePanel() {
+      // Sync config block so export always has the correct source
+      const source  = editor.value;
+      const cfg     = parseD2Config(source);
+      const withCfg = applyConfig(source, cfg.layoutEngine, cfg.sketch);
+      if (withCfg !== source) {
+        editor.value = withCfg;
+        saveSource(withCfg);
+        syncControls(withCfg);
+        scheduleRender();
+      }
+      managePanel.classList.add('active');
+      manageBackdrop.classList.remove('hidden');
+    }
+
+    function closeManagePanel() {
+      managePanel.classList.remove('active');
+      manageBackdrop.classList.add('hidden');
+    }
+
+    desktopExportBtn.addEventListener('click', () => {
+      managePanel.classList.contains('active') ? closeManagePanel() : openManagePanel();
+    });
+    manageCloseBtn.addEventListener('click', closeManagePanel);
+    manageBackdrop.addEventListener('click', closeManagePanel);
 
     // ─── Init ─────────────────────────────────────────────────────────────────
 
