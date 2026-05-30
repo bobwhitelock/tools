@@ -514,15 +514,14 @@
       background: white;
     }
 
-    /* Edit mode (direct manipulation of the preview) */
-    .preview-area.edit-mode { cursor: crosshair; }
-    .preview-area.edit-mode svg g[data-d2key] { cursor: pointer; }
-    .preview-area.edit-mode svg g[data-d2key].d2-hover .shape > *,
-    .preview-area.edit-mode svg g[data-d2key].d2-hover > rect,
-    .preview-area.edit-mode svg g[data-d2key].d2-hover > path {
-      stroke: #5b5bd6 !important; stroke-width: 3 !important;
+    /* Direct manipulation of the preview (always available) */
+    .preview-area svg g[data-d2key] { cursor: pointer; }
+    .preview-area svg g[data-d2key].d2-hover .shape > *,
+    .preview-area svg g[data-d2key].d2-hover > rect,
+    .preview-area svg g[data-d2key].d2-hover > path {
+      stroke: #f59e0b !important; stroke-width: 3 !important;
     }
-    /* Small key readout shown while hovering a node in edit mode */
+    /* Small key readout shown when a node is hovered/selected */
     .d2-key-readout {
       position: absolute; top: 8px; left: 8px; z-index: 5;
       background: #1f2330; color: #c9d1d9;
@@ -531,7 +530,7 @@
       pointer-events: none; max-width: 80%; white-space: nowrap;
       overflow: hidden; text-overflow: ellipsis; display: none;
     }
-    .preview-area.edit-mode .d2-key-readout.show { display: block; }
+    .d2-key-readout.show { display: block; }
 
     .preview-empty {
       margin-top: 60px;
@@ -1035,14 +1034,6 @@
             <span class="toggle-track"></span>
           </span>
         </label>
-        <div class="ctrl-divider"></div>
-        <label class="toggle-wrap" title="Edit mode — hover/drag elements in the preview to edit the source">
-          <span class="ctrl-label">Edit</span>
-          <span class="toggle">
-            <input type="checkbox" id="edit-toggle" />
-            <span class="toggle-track"></span>
-          </span>
-        </label>
       </div>
       <div class="preview-area" id="preview-area">
         <div class="spin-wrap" id="spinner">
@@ -1260,7 +1251,6 @@ cache -> db: Sync
     let renderTimer = null;
     let rendering   = false;
     let lastCompiled = null; // Last successful d2.compile() result (graph + diagram)
-    let editMode    = false; // Direct-manipulation (preview editing) mode
 
     // ─── GitHub state ─────────────────────────────────────────────────────────
 
@@ -1281,7 +1271,6 @@ cache -> db: Sync
     const editorHl      = document.getElementById('editor-hl');
     const layoutSelect  = document.getElementById('layout-select');
     const sketchToggle  = document.getElementById('sketch-toggle');
-    const editToggle    = document.getElementById('edit-toggle');
     const previewArea   = document.getElementById('preview-area');
     const previewContent= document.getElementById('preview-content');
     const keyReadout    = document.getElementById('d2-key-readout');
@@ -2059,18 +2048,11 @@ cache -> db: Sync
       keyReadout.classList.remove('show');
     }
 
-    function setEditMode(on) {
-      editMode = on;
-      previewArea.classList.toggle('edit-mode', on);
-      if (!on) clearHover();
-    }
-
-    editToggle.addEventListener('change', () => setEditMode(editToggle.checked));
-
-    // Delegated hover handling — listeners live on the persistent container
-    // because the inner SVG is replaced on every render.
+    // Delegated handling — listeners live on the persistent container because
+    // the inner SVG is replaced on every render. Editing is always available;
+    // passive hover (desktop) highlights the node under the cursor.
     previewContent.addEventListener('pointermove', (e) => {
-      if (!editMode) return;
+      if (e.pointerType === 'touch') return;   // touch uses tap, handled below
       const g = nodeFromPoint(e.target);
       if (!g) { clearHover(); return; }
       if (!g.classList.contains('d2-hover')) {
@@ -2080,13 +2062,11 @@ cache -> db: Sync
       keyReadout.textContent = g.dataset.d2key;
       keyReadout.classList.add('show');
     });
-    previewContent.addEventListener('pointerleave', () => { if (editMode) clearHover(); });
+    previewContent.addEventListener('pointerleave', clearHover);
 
-    // Increment-1 checkpoint: tapping/clicking a node highlights it and reports
-    // the resolved key (works on touch where there is no hover), so we can
-    // confirm the SVG→source mapping is correct before building edit operations.
+    // Tapping/clicking a node highlights it and reports the resolved key (works
+    // on touch where there is no hover).
     previewContent.addEventListener('click', (e) => {
-      if (!editMode) return;
       const g = nodeFromPoint(e.target);
       clearHover();
       if (g) {
