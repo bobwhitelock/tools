@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<!--
+  THROWAWAY SPIKE — not part of the app.
+  Goal: discover whether the in-browser D2 WASM exposes (or can be made to expose)
+  the internal helpers needed for robust bidirectional editing, especially
+  `getRefRanges` (source ranges of every reference to a key). Also inspect what
+  `compile()` already returns (graph / ast / ranges) as a fallback.
+
+  Everything is logged to the on-page console below AND to devtools, so a
+  screenshot or copy-paste of the page is enough to report back.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>D2 WASM internals spike</title>
+<style>
+  body { margin:0; background:#0d1117; color:#c9d1d9; font:13px/1.5 'SF Mono','Fira Code',Consolas,monospace; }
+  header { padding:12px 16px; background:#161b22; border-bottom:1px solid #30363d; }
+  header h1 { margin:0; font-size:15px; }
+  header .sub { color:#8b949e; font-size:12px; margin-top:4px; }
+  #log { padding:12px 16px; white-space:pre-wrap; word-break:break-word; }
+  .h  { color:#58a6ff; font-weight:bold; margin-top:18px; display:block; border-bottom:1px solid #30363d; padding-bottom:3px; }
+  .ok { color:#3fb950; }
+  .no { color:#f85149; }
+  .dim{ color:#8b949e; }
+  .v  { color:#d2a8ff; }
+</style>
+</head>
+<body>
+<header>
+  <h1>D2 WASM internals spike</h1>
+  <div class="sub">Loads <code>@terrastruct/d2</code> from esm.sh, probes the public API + worker, and inspects <code>compile()</code> output. Read the sections below top-to-bottom.</div>
+</header>
+<div id="log">Loading @terrastruct/d2 from esm.sh …</div>
+
+<script type="module">
+  const logEl = document.getElementById('log');
+  logEl.textContent = '';
+  function out(s='', cls) {
+    const span = document.createElement('span');
+    if (cls) span.className = cls;
+    span.textContent = s + '\n';
+    logEl.appendChild(span);
+    if (cls === 'no') console.error(s); else console.log(s);
+  }
+  const H = (s) => out('\n### ' + s, 'h');
+  // Safe stringify that truncates big/circular structures.
+  function brief(v, depth=2) {
+    const seen = new WeakSet();
+    function walk(x, d) {
+      if (x === null || typeof x !== 'object') return x;
+      if (seen.has(x)) return '[circular]';
+      seen.add(x);
+      if (d <= 0) return Array.isArray(x) ? `[Array(${x.length})]` : '[Object]';
+      if (Array.isArray(x)) return x.slice(0, 4).map(e => walk(e, d-1)).concat(x.length>4?[`…+${x.length-4} more`]:[]);
+      const o = {};
+      for (const k of Object.keys(x).slice(0, 40)) { try { o[k] = walk(x[k], d-1); } catch { o[k] = '[unreadable]'; } }
+      return o;
+    }
+    try { return JSON.stringify(walk(v, depth), null, 2); } catch (e) { return String(v); }
+  }
+  function methodsOf(obj) {
+    const out = new Set();
+    let o = obj;
+    while (o && o !== Object.prototype) {
+      for (const n of Object.getOwnPropertyNames(o)) {
+        if (n === 'constructor') continue;
+        try { if (typeof obj[n] === 'function') out.add(n); } catch {}
+      }
+      o = Object.getPrototypeOf(o);
+    }
+    return [...out].sort();
+  }
+
+  const SOURCE =
+`web: Web Browser
+api: API Server {shape: hexagon}
+db: Database {shape: cylinder}
+cache: Cache {shape: cloud}
+
+web -> api: HTTP
+api -> db: Query
+api -> cache: Read/Write
+cache -> db: Sync
+api.style.fill: "#eee"
+`;
+
+  let mod, D2, d2;
+  try {
+    mod = await import('https://esm.sh/@terrastruct/d2');
+    D2  = mod.D2;
+  } catch (e) {
+    out('FAILED to import @terrastruct/d2 from esm.sh: ' + e, 'no');
+    throw e;
+  }
+
+  // ── 1. Module + API surface ────────────────────────────────────────────────
+  H('1. Module export surface');
+  out('module exports: ' + JSON.stringify(Object.keys(mod)));
+  out('typeof D2: ' + typeof D2);
+
+  try {
+    d2 = new D2();
+  } catch (e) {
+    out('new D2() threw (maybe needs options): ' + e, 'no');
+  }
+
+  H('2. D2 instance — methods & own properties');
+  if (d2) {
+    out('instance methods (incl. prototype chain):');
+    out('  ' + methodsOf(d2).join(', '), 'v');
+    out('');
+    out('own enumerable properties + types:');
+    for (const k of Object.keys(d2)) {
+      let t = typeof d2[k];
+      let extra = '';
+      try {
+        if (d2[k] instanceof Worker) extra = '  <-- IS A Worker';
+        else if (t === 'object' && d2[k]) extra = '  keys=' + JSON.stringify(Object.keys(d2[k]).slice(0,12));
+      } catch {}
+      out(`  ${k}: ${t}${extra}`);
+    }
+  }
+
+  // Does the public API already expose any of the internal helpers we care about?
+  H('3. Are internal helpers already on the public API?');
+  const wanted = ['getRefRanges','getObjOrder','getParentID','getCompletions','getBoardAtPosition','getELKGraph','encode','decode'];
+  const have = d2 ? methodsOf(d2) : [];
+  for (const w of wanted) {
+    const present = have.includes(w);
+    out(`  ${present ? '✓' : '✗'} ${w}`, present ? 'ok' : 'no');
+  }
+
+  // ── 4. compile() output shape (the A2 fallback) ────────────────────────────
+  H('4. compile() return shape (fallback path)');
+  let compiled;
+  try {
+    compiled = await d2.compile(SOURCE);
+    out('compile() resolved. top-level keys: ' + JSON.stringify(Object.keys(compiled)), 'ok');
+    if (compiled.graph) {
+      out('graph keys: ' + JSON.stringify(Object.keys(compiled.graph)));
+      out('graph.objects count: ' + (compiled.graph.objects?.length ?? 'n/a'));
+      out('graph.edges count: ' + (compiled.graph.edges?.length ?? 'n/a'));
+      out('graph.ast present: ' + (!!compiled.graph.ast));
+      // Does the AST carry source ranges? Search for a "range" field anywhere shallow.
+      const astStr = (() => { try { return JSON.stringify(compiled.graph.ast); } catch { return ''; } })();
+      out('graph.ast mentions "range": ' + /\"range\"/i.test(astStr), /\"range\"/i.test(astStr) ? 'ok' : 'no');
+      out('graph.ast mentions "Range"/"start"/"line": ' + /\"(Range|start|line)\"/.test(astStr));
+      // First object — does it expose a key + references/ranges?
+      const o0 = compiled.graph.objects?.[0];
+      if (o0) { out('\nsample graph.objects[0] (depth 2):'); out(brief(o0, 2), 'dim'); }
+      const e0 = compiled.graph.edges?.[0];
+      if (e0) { out('\nsample graph.edges[0] (depth 2):'); out(brief(e0, 2), 'dim'); }
+    } else {
+      out('NO graph field on compile() result — full shape (depth 2):', 'no');
+      out(brief(compiled, 2), 'dim');
+    }
+  } catch (e) {
+    out('compile() threw: ' + e, 'no');
+  }
+
+  // ── 5. SVG element ids (the read-mapping, should be free) ───────────────────
+  H('5. Rendered SVG element ids (node/edge mapping)');
+  try {
+    const svg = await d2.render(compiled.diagram, compiled.renderOptions);
+    const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+    const ids = [...doc.querySelectorAll('g[id]')].map(g => g.id);
+    out('all g[id] ids in rendered SVG:');
+    ids.forEach(id => out('  ' + id, /->/.test(id) ? 'dim' : 'v'));
+    out('\n(purple = node ids = source keys; grey = edge ids)');
+  } catch (e) {
+    out('render() threw: ' + e, 'no');
+  }
+
+  // ── 6. Best-effort: try to reach the worker / internal funcs ────────────────
+  H('6. Worker probe (can we reach getRefRanges?)');
+  let workerRef = null;
+  if (d2) {
+    for (const k of Object.keys(d2)) {
+      try { if (d2[k] instanceof Worker) { workerRef = d2[k]; out(`found Worker at d2.${k}`, 'ok'); break; } } catch {}
+      // also one level deep
+      try {
+        const v = d2[k];
+        if (v && typeof v === 'object') for (const k2 of Object.keys(v)) {
+          if (v[k2] instanceof Worker) { workerRef = v[k2]; out(`found Worker at d2.${k}.${k2}`, 'ok'); break; }
+        }
+      } catch {}
+    }
+  }
+  if (!workerRef) {
+    out('No Worker reference found on the instance. The published wrapper may run', 'no');
+    out('the WASM on the main thread, or hide the worker in a closure. If hidden,', 'dim');
+    out('reaching internals needs loading the raw wasm ourselves (next spike).', 'dim');
+  } else {
+    out('Worker found. Attempting to sniff its message protocol …');
+    const origPost = workerRef.postMessage.bind(workerRef);
+    out('(We will not break the worker; just log a probe.)', 'dim');
+    // Listen for any messages so we can learn the protocol shape.
+    workerRef.addEventListener('message', (ev) => {
+      out('worker -> main message: ' + brief(ev.data, 2), 'dim');
+    });
+    // Try a few plausible request shapes for getRefRanges. Unknown protocol, so
+    // this is exploratory; watch the logged responses (if any) to learn the shape.
+    const probes = [
+      { type: 'getRefRanges', key: 'api', source: SOURCE },
+      { method: 'getRefRanges', args: ['api'] },
+      { fn: 'getRefRanges', boardPath: '', key: 'api', source: SOURCE },
+    ];
+    probes.forEach((p, i) => { try { origPost({ id: 9000+i, ...p }); out('sent probe ' + i + ': ' + JSON.stringify(p)); } catch (e) { out('probe ' + i + ' postMessage failed: ' + e, 'no'); } });
+    out('\nIf no "worker -> main" lines appear above within a few seconds, the', 'dim');
+    out('worker ignores unknown message types (expected) — confirms we cannot', 'dim');
+    out('reach getRefRanges through the published worker without modifying it.', 'dim');
+  }
+
+  H('DONE');
+  out('Copy/paste or screenshot everything above to report back.');
+</script>
+</body>
+</html>
