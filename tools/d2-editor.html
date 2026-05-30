@@ -2082,12 +2082,19 @@ cache -> db: Sync
     });
     previewContent.addEventListener('pointerleave', () => { if (editMode) clearHover(); });
 
-    // Increment-1 checkpoint: clicking a node reports the resolved key, so we can
+    // Increment-1 checkpoint: tapping/clicking a node highlights it and reports
+    // the resolved key (works on touch where there is no hover), so we can
     // confirm the SVG→source mapping is correct before building edit operations.
     previewContent.addEventListener('click', (e) => {
       if (!editMode) return;
       const g = nodeFromPoint(e.target);
-      if (g) showToast('Element key: ' + g.dataset.d2key);
+      clearHover();
+      if (g) {
+        g.classList.add('d2-hover');
+        keyReadout.textContent = (g.dataset.d2kind === 'conn' ? 'edge: ' : 'node: ') + g.dataset.d2key;
+        keyReadout.classList.add('show');
+        showToast('Element key: ' + g.dataset.d2key);
+      }
     });
 
     // ─── Export helpers ───────────────────────────────────────────────────────
