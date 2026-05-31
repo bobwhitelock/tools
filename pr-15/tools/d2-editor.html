@@ -2152,33 +2152,126 @@ cache -> db: Sync
           const segs = ref.key?.path;
           if (!segs?.length) continue;
           const kpi = Math.min(ref.key_path_index ?? 0, segs.length - 1);
-          if (kpi !== segs.length - 1) continue; // only full-key refs for identification
+          if (kpi !== segs.length - 1) continue;
           const joined = segs.slice(0, kpi + 1).map(segVal).filter(Boolean).join('.');
           if (joined === nodeKey) { targetObj = obj; break; }
         }
         if (targetObj) break;
       }
 
-      if (!targetObj) {
-        // Block-scope nodes (declared inside `container: { node: ... }` braces) store
-        // references as single-segment short names; byte substitution can't relocate them.
-        showToast('Block-scope node — convert to dot notation first (e.g. ' + nodeKey + ': ...)');
-        return;
-      }
-
       const leaf = nodeKey.includes('.') ? nodeKey.slice(nodeKey.lastIndexOf('.') + 1) : nodeKey;
       const newKey = newParentKey ? newParentKey + '.' + leaf : leaf;
       if (newKey === nodeKey) { resetInteraction(); return; }
 
-      // Build edits: for each ref, replace path[0..kpi] bytes with newKey.
-      // This covers declarations, edges, and sub-key prefixes (e.g. network.api.style).
+      // For block-scope nodes (declared inside container { } braces), targetObj may be
+      // null (no cross-scope refs) or non-null but with a single-segment declaration ref.
+      // Fall back to short-id lookup when targetObj is null.
+      const objToCheck = targetObj ?? (() => {
+        const matches = lastCompiled.graph.objects.filter(o => o.id === leaf);
+        return matches.length === 1 ? matches[0] : null;
+      })();
+      if (!objToCheck) { showToast('Could not uniquely identify node — add dot-notation declaration first'); return; }
+
+      // Detect block-scope: nodeKey has dots AND declaration ref is a single path segment
+      // (block-scope refs use the short local name; dot-notation refs use the full path)
+      const declRef = objToCheck.references?.find(r =>
+        r.map_key_edge_index === -1 && (r.key?.path?.length ?? 0) === 1
+      );
+      const blockScope = nodeKey.includes('.') && !!declRef;
+
+      if (!targetObj && !blockScope) {
+        showToast('Node not found in graph');
+        return;
+      }
+
+      if (blockScope) {
+        // ── Block-scope structural move ────────────────────────────────────────
+        // Declaration lives inside a container's { } block. We:
+        //   1. Find its full extent in graph.ast
+        //   2. Remove the whole declaration line from the block
+        //   3. Collect cross-scope ref edits (fully-qualified path refs)
+        //   4. Append the declaration at end of source with the new key
+        const ast = lastCompiled.graph.ast;
+        if (!ast) { showToast('AST unavailable'); return; }
+
+        const declKeyR = parseD2Range(Object.values(declRef.key.path[0])[0]?.range);
+        if (!declKeyR) { showToast('Could not parse declaration range'); return; }
+
+        // Walk ast.nodes recursively, matching by range-start byte
+        function findMapKeyRange(nodes, startByte) {
+          for (const node of (nodes || [])) {
+            const mk = node.map_key;
+            if (!mk) continue;
+            const r = parseD2Range(mk.range);
+            if (r?.start === startByte) return r;
+            const found = findMapKeyRange(mk.value?.map?.nodes, startByte);
+            if (found) return found;
+          }
+          return null;
+        }
+
+        const fullDeclR = findMapKeyRange(ast.nodes, declKeyR.start);
+        if (!fullDeclR) { showToast('Could not locate declaration in AST'); return; }
+
+        const src = editor.value;
+        // Value suffix = everything in the declaration after the key token (e.g. ": API Server")
+        const keyLen = declKeyR.end - declKeyR.start;
+        const valueSuffix = src.slice(fullDeclR.start + keyLen, fullDeclR.end);
+
+        // Full line extent: back to start of line, forward past trailing \n
+        let removeStart = fullDeclR.start;
+        while (removeStart > 0 && src[removeStart - 1] !== '\n') removeStart--;
+        const nlPos = src.indexOf('\n', fullDeclR.end - 1);
+        const removeEnd = nlPos === -1 ? src.length : nlPos + 1;
+
+        // Cross-scope refs (fully-qualified path = nodeKey) — updates edge/attribute refs
+        const edits = [];
+        for (const ref of (objToCheck.references || [])) {
+          if (ref.map_key_edge_index === -1) continue; // declaration handled separately
+          const segs = ref.key?.path;
+          if (!segs?.length) continue;
+          const kpi = Math.min(ref.key_path_index ?? 0, segs.length - 1);
+          const joined = segs.slice(0, kpi + 1).map(segVal).filter(Boolean).join('.');
+          if (joined !== nodeKey) continue;
+          const startR = parseD2Range(Object.values(segs[0])[0]?.range);
+          const endR   = parseD2Range(Object.values(segs[kpi])[0]?.range);
+          if (!startR || !endR) continue;
+          edits.push({ start: startR.start, end: endR.end, replacement: newKey });
+        }
+
+        // Check for scope-relative refs inside the block that we can't safely rename
+        const hasUnhandledRefs = (objToCheck.references || []).some(r => {
+          if (r.map_key_edge_index === -1) return false;
+          const segs = r.key?.path;
+          if (!segs?.length) return false;
+          const kpi = Math.min(r.key_path_index ?? 0, segs.length - 1);
+          const joined = segs.slice(0, kpi + 1).map(segVal).filter(Boolean).join('.');
+          return joined !== nodeKey;
+        });
+
+        edits.push({ start: removeStart, end: removeEnd, replacement: '' });
+        edits.sort((a, b) => b.start - a.start);
+
+        pushUndo();
+        let newSrc = src;
+        for (const { start, end, replacement } of edits) {
+          newSrc = newSrc.slice(0, start) + replacement + newSrc.slice(end);
+        }
+        newSrc = newSrc.replace(/\n*$/, '') + '\n' + newKey + valueSuffix + '\n';
+        applyEditedSource(newSrc);
+
+        if (hasUnhandledRefs) showToast('Moved — check references inside the original block');
+        return;
+      }
+
+      // ── Dot-notation / top-level: byte-substitution on all fully-qualified refs ──
       const edits = [];
       for (const ref of targetObj.references) {
         const segs = ref.key?.path;
         if (!segs?.length) continue;
         const kpi = Math.min(ref.key_path_index ?? 0, segs.length - 1);
         const joined = segs.slice(0, kpi + 1).map(segVal).filter(Boolean).join('.');
-        if (joined !== nodeKey) continue; // skip scope-relative short-form refs
+        if (joined !== nodeKey) continue;
         const startR = parseD2Range(Object.values(segs[0])[0]?.range);
         const endR   = parseD2Range(Object.values(segs[kpi])[0]?.range);
         if (!startR || !endR) continue;
@@ -2186,7 +2279,7 @@ cache -> db: Sync
       }
 
       if (!edits.length) { showToast('Could not locate source references'); return; }
-      edits.sort((a, b) => b.start - a.start); // right-to-left keeps earlier offsets valid
+      edits.sort((a, b) => b.start - a.start);
 
       pushUndo();
       let src = editor.value;
