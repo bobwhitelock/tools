@@ -2105,6 +2105,15 @@ cache -> db: Sync
     // Delegated handling — listeners live on the persistent container because
     // the inner SVG is replaced on every render.
 
+    // On mobile, scrollable containers have an implicit passive touchstart
+    // listener; the browser claims the touch for scrolling and fires
+    // pointercancel almost immediately, killing our drag before it starts.
+    // Intercept touchstart non-passively so we can preventDefault() on nodes,
+    // stopping the scroll gesture without breaking scrolling on empty space.
+    previewContent.addEventListener('touchstart', (e) => {
+      if (nodeFromPoint(e.target)) e.preventDefault();
+    }, { passive: false });
+
     previewContent.addEventListener('pointerdown', (e) => {
       if (dragState) return;
       if (e.button !== 0 && e.pointerType === 'mouse') return;
@@ -2179,19 +2188,29 @@ cache -> db: Sync
     });
 
     previewContent.addEventListener('pointerup', (e) => {
-      if (!dragState) return;
-      const { srcKey, targetEl, isDragging, srcEl } = dragState;
-      teardownDrag();
-      clearHover();
-
-      if (isDragging) {
-        if (targetEl) addConnection(srcKey, targetEl.dataset.d2key);
-      } else {
-        // Short tap/click — identify the element
-        srcEl.classList.add('d2-hover');
-        keyReadout.textContent = 'node: ' + srcKey;
+      if (dragState) {
+        const { srcKey, targetEl, isDragging, srcEl } = dragState;
+        teardownDrag();
+        clearHover();
+        if (isDragging) {
+          if (targetEl) addConnection(srcKey, targetEl.dataset.d2key);
+        } else {
+          // Short tap on a shape — identify it
+          srcEl.classList.add('d2-hover');
+          keyReadout.textContent = 'node: ' + srcKey;
+          keyReadout.classList.add('show');
+          showToast('Element key: ' + srcKey);
+        }
+        return;
+      }
+      // No drag state: tap landed on an edge (pointerdown skips edges)
+      const g = nodeFromPoint(e.target);
+      if (g && g.dataset.d2kind === 'conn') {
+        clearHover();
+        g.classList.add('d2-hover');
+        keyReadout.textContent = 'edge: ' + g.dataset.d2key;
         keyReadout.classList.add('show');
-        showToast('Element key: ' + srcKey);
+        showToast('Edge: ' + g.dataset.d2key);
       }
     });
 
@@ -2204,9 +2223,9 @@ cache -> db: Sync
       if (!dragState) clearHover();
     });
 
-    // Tapping an edge (connection) shows its key; edges can't be drag sources.
+    // click handles edge taps on desktop (touch path is now in pointerup above).
     previewContent.addEventListener('click', (e) => {
-      if (dragState) return; // drag in progress, ignore
+      if (dragState) return;
       const g = nodeFromPoint(e.target);
       if (g && g.dataset.d2kind === 'conn') {
         clearHover();
