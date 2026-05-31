@@ -2270,7 +2270,10 @@ cache -> db: Sync
         const processedEdges = new Set(); // deduplicate edges (self-loops, etc.)
 
         for (const ref of (objToCheck.references || [])) {
-          if (ref.map_key_edge_index === -1) continue; // declaration handled separately
+          // Skip only the main declaration (single-segment, edge_index -1).
+          // Sub-key attribute refs (e.g. api.style.fill) also have edge_index -1
+          // but path.length > 1 — those must move with the node.
+          if (ref.map_key_edge_index === -1 && (ref.key?.path?.length ?? 0) <= 1) continue;
           const segs = ref.key?.path;
           if (!segs?.length) continue;
           const kpi = Math.min(ref.key_path_index ?? 0, segs.length - 1);
@@ -2281,8 +2284,25 @@ cache -> db: Sync
             const startR = parseD2Range(Object.values(segs[0])[0]?.range);
             const endR   = parseD2Range(Object.values(segs[kpi])[0]?.range);
             if (startR && endR) edits.push({ start: startR.start, end: endR.end, replacement: newKey });
+          } else if (ref.map_key_edge_index === -1) {
+            // Scope-relative sub-key attribute (e.g. api.style.fill: orange inside block).
+            // Find its map_key via the first segment's byte position, remove the line,
+            // and append with the new key prefix.
+            const segByte = parseD2Range(Object.values(segs[0])[0]?.range)?.start;
+            if (segByte == null) continue;
+            const attrInfo = findMapKeyAt(ast.nodes, segByte);
+            if (!attrInfo) continue;
+            const { r: attrMkR } = attrInfo;
+            const restVals = segs.slice(1).map(segVal).filter(Boolean);
+            const newAttrKey = newKey + (restVals.length ? '.' + restVals.join('.') : '');
+            const lastSegR = parseD2Range(Object.values(segs[segs.length - 1])[0]?.range);
+            if (!lastSegR) continue;
+            const attrValueSuffix = src.slice(lastSegR.end, attrMkR.end);
+            const attrLineR = lineRange(attrMkR);
+            edits.push({ start: attrLineR.start, end: attrLineR.end, replacement: '' });
+            appendLines.push(newAttrKey + attrValueSuffix);
           } else {
-            // Scope-relative ref inside the block: extract, re-qualify, and relocate
+            // Scope-relative edge ref inside the block: extract, re-qualify, and relocate
             const segByte = parseD2Range(Object.values(segs[0])[0]?.range)?.start;
             if (segByte == null) continue;
             const edgeInfo = edgeSegLookup.get(segByte);
