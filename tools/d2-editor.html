@@ -2102,137 +2102,185 @@ cache -> db: Sync
       scheduleRender();
     }
 
-    // Delegated handling — listeners live on the persistent container because
-    // the inner SVG is replaced on every render.
+    // ── Helpers shared by both input paths ─────────────────────────────────────
 
-    // On mobile, scrollable containers have an implicit passive touchstart
-    // listener; the browser claims the touch for scrolling and fires
-    // pointercancel almost immediately, killing our drag before it starts.
-    // Intercept touchstart non-passively so we can preventDefault() on nodes,
-    // stopping the scroll gesture without breaking scrolling on empty space.
-    previewContent.addEventListener('touchstart', (e) => {
-      if (nodeFromPoint(e.target)) e.preventDefault();
-    }, { passive: false });
-
-    previewContent.addEventListener('pointerdown', (e) => {
-      if (dragState) return;
-      if (e.button !== 0 && e.pointerType === 'mouse') return;
-      const g = nodeFromPoint(e.target);
-      if (!g || g.dataset.d2kind !== 'shape') return;
-
-      const svgEl = previewContent.querySelector('svg');
-      if (!svgEl) return;
-      const startPt = clientToSvg(svgEl, e.clientX, e.clientY);
-      if (!startPt) return;
-
+    function makeTempLine(svgEl, x, y) {
       const ns = 'http://www.w3.org/2000/svg';
       const line = document.createElementNS(ns, 'line');
-      line.setAttribute('x1', startPt.x); line.setAttribute('y1', startPt.y);
-      line.setAttribute('x2', startPt.x); line.setAttribute('y2', startPt.y);
+      line.setAttribute('x1', x); line.setAttribute('y1', y);
+      line.setAttribute('x2', x); line.setAttribute('y2', y);
       line.setAttribute('stroke', '#f59e0b');
       line.setAttribute('stroke-width', '2');
       line.setAttribute('stroke-dasharray', '6 3');
       line.setAttribute('pointer-events', 'none');
-      line.style.display = 'none'; // shown only after threshold crossed
+      line.style.display = 'none';
       svgEl.appendChild(line);
+      return line;
+    }
 
-      dragState = {
-        pointerId: e.pointerId, srcKey: g.dataset.d2key, srcEl: g,
-        svgEl, tempLine: line,
-        startClient: { x: e.clientX, y: e.clientY },
-        isDragging: false, targetEl: null,
-      };
-      try { previewContent.setPointerCapture(e.pointerId); } catch {}
-      // Suppress the native long-press / text-selection gesture on touch.
-      e.preventDefault();
-    });
-
-    previewContent.addEventListener('pointermove', (e) => {
-      if (!dragState) {
-        // Passive desktop hover
-        if (e.pointerType === 'touch') return;
-        const g = nodeFromPoint(e.target);
-        if (!g) { clearHover(); return; }
-        if (!g.classList.contains('d2-hover')) { clearHover(); g.classList.add('d2-hover'); }
-        keyReadout.textContent = g.dataset.d2key;
-        keyReadout.classList.add('show');
-        return;
-      }
-
-      const dx = e.clientX - dragState.startClient.x;
-      const dy = e.clientY - dragState.startClient.y;
-      if (!dragState.isDragging && Math.hypot(dx, dy) < 8) return;
-
-      if (!dragState.isDragging) {
-        dragState.isDragging = true;
-        dragState.srcEl.classList.add('d2-drag-src');
-        dragState.tempLine.style.display = '';
+    function updateDragLine(state, cx, cy) {
+      const dx = cx - state.startClient.x;
+      const dy = cy - state.startClient.y;
+      if (!state.isDragging && Math.hypot(dx, dy) < 8) return;
+      if (!state.isDragging) {
+        state.isDragging = true;
+        state.srcEl.classList.add('d2-drag-src');
+        state.tempLine.style.display = '';
         clearHover();
       }
-
-      const pt = clientToSvg(dragState.svgEl, e.clientX, e.clientY);
+      const pt = clientToSvg(state.svgEl, cx, cy);
       if (pt) {
-        dragState.tempLine.setAttribute('x2', pt.x);
-        dragState.tempLine.setAttribute('y2', pt.y);
+        state.tempLine.setAttribute('x2', pt.x);
+        state.tempLine.setAttribute('y2', pt.y);
       }
-
-      // elementFromPoint bypasses pointer capture to find what's really under us
-      const underEl = document.elementFromPoint(e.clientX, e.clientY);
+      const underEl = document.elementFromPoint(cx, cy);
       const targetG = nodeFromPoint(underEl);
-      const validTarget = targetG && targetG !== dragState.srcEl && targetG.dataset.d2kind === 'shape'
+      const validTarget = targetG && targetG !== state.srcEl && targetG.dataset.d2kind === 'shape'
         ? targetG : null;
-      setDragTarget(validTarget);
-      dragState.tempLine.setAttribute('stroke', validTarget ? '#22c55e' : '#f59e0b');
-
-      e.preventDefault();
-    });
-
-    previewContent.addEventListener('pointerup', (e) => {
-      if (dragState) {
-        const { srcKey, targetEl, isDragging, srcEl } = dragState;
-        teardownDrag();
-        clearHover();
-        if (isDragging) {
-          if (targetEl) addConnection(srcKey, targetEl.dataset.d2key);
-        } else {
-          // Short tap on a shape — identify it
-          srcEl.classList.add('d2-hover');
-          keyReadout.textContent = 'node: ' + srcKey;
-          keyReadout.classList.add('show');
-          showToast('Element key: ' + srcKey);
-        }
-        return;
+      if (state.targetEl !== validTarget) {
+        if (state.targetEl) state.targetEl.classList.remove('d2-drag-target');
+        state.targetEl = validTarget;
+        if (validTarget) validTarget.classList.add('d2-drag-target');
       }
-      // No drag state: tap landed on an edge (pointerdown skips edges)
+      state.tempLine.setAttribute('stroke', validTarget ? '#22c55e' : '#f59e0b');
+    }
+
+    function commitDrag(state) {
+      state.tempLine.remove();
+      if (state.targetEl) state.targetEl.classList.remove('d2-drag-target');
+      state.srcEl.classList.remove('d2-drag-src');
+      clearHover();
+      if (state.isDragging) {
+        if (state.targetEl) addConnection(state.srcKey, state.targetEl.dataset.d2key);
+      } else {
+        state.srcEl.classList.add('d2-hover');
+        keyReadout.textContent = 'node: ' + state.srcKey;
+        keyReadout.classList.add('show');
+        showToast('Element key: ' + state.srcKey);
+      }
+    }
+
+    // ── Touch path (mobile) ─────────────────────────────────────────────────────
+    // Touch events are handled separately from mouse events to avoid the
+    // cross-browser mess of pointer events + passive scroll containers.
+
+    let touchState = null;
+
+    previewContent.addEventListener('touchstart', (e) => {
+      if (touchState) return;
       const g = nodeFromPoint(e.target);
-      if (g && g.dataset.d2kind === 'conn') {
+      if (!g) return; // empty space — let browser scroll
+
+      e.preventDefault(); // claim this touch; stops scroll & long-press selection
+
+      if (g.dataset.d2kind === 'conn') {
         clearHover();
         g.classList.add('d2-hover');
         keyReadout.textContent = 'edge: ' + g.dataset.d2key;
         keyReadout.classList.add('show');
         showToast('Edge: ' + g.dataset.d2key);
+        return;
       }
+
+      const svgEl = previewContent.querySelector('svg');
+      if (!svgEl) return;
+      const t = e.changedTouches[0];
+      const startPt = clientToSvg(svgEl, t.clientX, t.clientY);
+      if (!startPt) return;
+
+      touchState = {
+        id: t.identifier,
+        srcKey: g.dataset.d2key, srcEl: g, svgEl,
+        tempLine: makeTempLine(svgEl, startPt.x, startPt.y),
+        startClient: { x: t.clientX, y: t.clientY },
+        isDragging: false, targetEl: null,
+      };
+    }, { passive: false });
+
+    previewContent.addEventListener('touchmove', (e) => {
+      if (!touchState) return;
+      const t = [...e.changedTouches].find(x => x.identifier === touchState.id);
+      if (!t) return;
+      e.preventDefault();
+      updateDragLine(touchState, t.clientX, t.clientY);
+    }, { passive: false });
+
+    previewContent.addEventListener('touchend', (e) => {
+      if (!touchState) return;
+      const state = touchState;
+      touchState = null;
+      commitDrag(state);
     });
 
-    previewContent.addEventListener('pointercancel', () => {
-      if (dragState) teardownDrag();
+    previewContent.addEventListener('touchcancel', () => {
+      if (!touchState) return;
+      touchState.tempLine.remove();
+      if (touchState.targetEl) touchState.targetEl.classList.remove('d2-drag-target');
+      touchState.srcEl.classList.remove('d2-drag-src');
+      touchState = null;
       clearHover();
     });
 
-    previewContent.addEventListener('pointerleave', () => {
-      if (!dragState) clearHover();
+    // ── Mouse path (desktop) ────────────────────────────────────────────────────
+
+    previewContent.addEventListener('pointermove', (e) => {
+      if (e.pointerType !== 'mouse') return;
+      if (dragState) return; // drag is handled by document listeners below
+      const g = nodeFromPoint(e.target);
+      if (!g) { clearHover(); return; }
+      if (!g.classList.contains('d2-hover')) { clearHover(); g.classList.add('d2-hover'); }
+      keyReadout.textContent = g.dataset.d2key;
+      keyReadout.classList.add('show');
+    });
+    previewContent.addEventListener('pointerleave', (e) => {
+      if (e.pointerType !== 'mouse' || dragState) return;
+      clearHover();
     });
 
-    // click handles edge taps on desktop (touch path is now in pointerup above).
+    previewContent.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'mouse' || e.button !== 0 || dragState) return;
+      const g = nodeFromPoint(e.target);
+      if (!g || g.dataset.d2kind !== 'shape') return;
+      const svgEl = previewContent.querySelector('svg');
+      if (!svgEl) return;
+      const startPt = clientToSvg(svgEl, e.clientX, e.clientY);
+      if (!startPt) return;
+      dragState = {
+        srcKey: g.dataset.d2key, srcEl: g, svgEl,
+        tempLine: makeTempLine(svgEl, startPt.x, startPt.y),
+        startClient: { x: e.clientX, y: e.clientY },
+        isDragging: false, targetEl: null,
+      };
+      e.preventDefault();
+    });
+
+    // Mouse drag tracked on document so it works even if pointer leaves preview.
+    document.addEventListener('mousemove', (e) => {
+      if (!dragState) return;
+      updateDragLine(dragState, e.clientX, e.clientY);
+    });
+    document.addEventListener('mouseup', (e) => {
+      if (!dragState) return;
+      const state = dragState;
+      dragState = null;
+      commitDrag(state);
+    });
+
+    // click handles edge taps and shape taps on desktop.
     previewContent.addEventListener('click', (e) => {
       if (dragState) return;
       const g = nodeFromPoint(e.target);
-      if (g && g.dataset.d2kind === 'conn') {
-        clearHover();
-        g.classList.add('d2-hover');
+      if (!g) return;
+      clearHover();
+      g.classList.add('d2-hover');
+      if (g.dataset.d2kind === 'conn') {
         keyReadout.textContent = 'edge: ' + g.dataset.d2key;
         keyReadout.classList.add('show');
         showToast('Edge: ' + g.dataset.d2key);
+      } else {
+        keyReadout.textContent = 'node: ' + g.dataset.d2key;
+        keyReadout.classList.add('show');
+        showToast('Element key: ' + g.dataset.d2key);
       }
     });
 
