@@ -444,6 +444,19 @@
       flex-shrink: 0;
     }
 
+    .ctrl-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px;
+      border: 1.5px solid var(--border); border-radius: 8px;
+      background: var(--surface); color: var(--text);
+      cursor: pointer; flex-shrink: 0;
+      -webkit-tap-highlight-color: transparent;
+      transition: background .12s, opacity .12s;
+    }
+    .ctrl-btn:active { background: var(--border); }
+    .ctrl-btn:disabled { opacity: 0.3; cursor: default; }
+    .ctrl-btn svg { width: 15px; height: 15px; }
+
     /* Toggle switch */
     .toggle-wrap {
       display: flex;
@@ -1087,6 +1100,13 @@
             <span class="toggle-track"></span>
           </span>
         </label>
+        <div class="ctrl-divider"></div>
+        <button class="ctrl-btn" id="btn-undo" title="Undo (Ctrl/Cmd+Z)" disabled aria-label="Undo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+        </button>
+        <button class="ctrl-btn" id="btn-redo" title="Redo (Ctrl/Cmd+Shift+Z)" disabled aria-label="Redo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
+        </button>
       </div>
       <div class="preview-area" id="preview-area">
         <div class="spin-wrap" id="spinner">
@@ -1341,6 +1361,8 @@ cache -> db: Sync
     const actionLabel   = document.getElementById('d2-act-label');
     const actionBar     = document.getElementById('d2-action-bar');
     const actionBarText = document.getElementById('d2-act-bar-text');
+    const btnUndo       = document.getElementById('btn-undo');
+    const btnRedo       = document.getElementById('btn-redo');
     const spinnerEl     = document.getElementById('spinner');
     const statusDot     = document.getElementById('status-dot');
     const statusText    = document.getElementById('status-text');
@@ -1592,6 +1614,7 @@ cache -> db: Sync
       if (undoStack.length > MAX_UNDO) undoStack.shift();
       redoStack.length = 0;
       snapValue = editor.value;
+      syncUndoButtons();
     }
 
     /** After a programmatic change, mark the new value as the baseline (no double-snap). */
@@ -1610,6 +1633,7 @@ cache -> db: Sync
           if (undoStack.length > MAX_UNDO) undoStack.shift();
           redoStack.length = 0;
           snapValue = v;
+          syncUndoButtons();
         }
       }, 400);
     }
@@ -1624,10 +1648,16 @@ cache -> db: Sync
       scheduleRender();
     }
 
+    function syncUndoButtons() {
+      btnUndo.disabled = undoStack.length === 0;
+      btnRedo.disabled = redoStack.length === 0;
+    }
+
     function doUndo() {
       if (!undoStack.length) return;
       redoStack.push(editor.value);
       restoreValue(undoStack.pop());
+      syncUndoButtons();
     }
 
     function doRedo() {
@@ -1635,7 +1665,11 @@ cache -> db: Sync
       undoStack.push(editor.value);
       if (undoStack.length > MAX_UNDO) undoStack.shift();
       restoreValue(redoStack.pop());
+      syncUndoButtons();
     }
+
+    btnUndo.addEventListener('click', doUndo);
+    btnRedo.addEventListener('click', doRedo);
 
     // ─── Find & Replace ───────────────────────────────────────────────────────
 
