@@ -515,7 +515,14 @@
     }
 
     /* Direct manipulation of the preview (always available) */
-    .preview-area svg g[data-d2key] { cursor: pointer; }
+    .preview-area svg g[data-d2key] {
+      cursor: pointer;
+      /* Claim touches starting on a node for our pointer handlers instead of
+         letting the browser scroll or select text. Empty space still scrolls. */
+      touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
     .preview-area svg g[data-d2key].d2-hover .shape > *,
     .preview-area svg g[data-d2key].d2-hover > rect,
     .preview-area svg g[data-d2key].d2-hover > path {
@@ -2127,6 +2134,8 @@ cache -> db: Sync
         isDragging: false, targetEl: null,
       };
       try { previewContent.setPointerCapture(e.pointerId); } catch {}
+      // Suppress the native long-press / text-selection gesture on touch.
+      e.preventDefault();
     });
 
     previewContent.addEventListener('pointermove', (e) => {
