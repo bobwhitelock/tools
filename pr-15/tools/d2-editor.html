@@ -2186,70 +2186,139 @@ cache -> db: Sync
 
       if (blockScope) {
         // ── Block-scope structural move ────────────────────────────────────────
-        // Declaration lives inside a container's { } block. We:
-        //   1. Find its full extent in graph.ast
-        //   2. Remove the whole declaration line from the block
-        //   3. Collect cross-scope ref edits (fully-qualified path refs)
-        //   4. Append the declaration at end of source with the new key
+        // Declaration and any scope-relative edges live inside a container block.
+        // We extract them all, remove their lines, and append fully-qualified
+        // equivalents at end of source. Cross-scope refs get byte-substituted.
         const ast = lastCompiled.graph.ast;
         if (!ast) { showToast('AST unavailable'); return; }
 
         const declKeyR = parseD2Range(Object.values(declRef.key.path[0])[0]?.range);
         if (!declKeyR) { showToast('Could not parse declaration range'); return; }
 
-        // Walk ast.nodes recursively, matching by range-start byte
-        function findMapKeyRange(nodes, startByte) {
+        // Walk ast.nodes recursively, finding map_key whose range starts at startByte
+        function findMapKeyAt(nodes, startByte) {
           for (const node of (nodes || [])) {
             const mk = node.map_key;
             if (!mk) continue;
             const r = parseD2Range(mk.range);
-            if (r?.start === startByte) return r;
-            const found = findMapKeyRange(mk.value?.map?.nodes, startByte);
+            if (r?.start === startByte) return { mk, r };
+            const found = findMapKeyAt(mk.value?.map?.nodes, startByte);
             if (found) return found;
           }
           return null;
         }
 
-        const fullDeclR = findMapKeyRange(ast.nodes, declKeyR.start);
-        if (!fullDeclR) { showToast('Could not locate declaration in AST'); return; }
+        // Build lookup: edge-segment byte start → {mk, r} for every edge in the AST
+        function buildEdgeSegLookup(astNodes) {
+          const lookup = new Map();
+          function traverse(nodes) {
+            for (const node of (nodes || [])) {
+              const mk = node.map_key;
+              if (!mk) continue;
+              if (mk.edges?.length) {
+                const r = parseD2Range(mk.range);
+                for (const edge of mk.edges) {
+                  for (const seg of [...(edge.src?.path || []), ...(edge.dst?.path || [])]) {
+                    const sr = parseD2Range(Object.values(seg)[0]?.range);
+                    if (sr) lookup.set(sr.start, { mk, r });
+                  }
+                }
+              }
+              if (mk.value?.map?.nodes) traverse(mk.value.map.nodes);
+            }
+          }
+          traverse(astNodes);
+          return lookup;
+        }
+
+        // Fully-qualify one edge endpoint path relative to the containing scope.
+        // Segments starting with the moved node's leaf are rewritten to newKey;
+        // everything else is prefixed with the scope (e.g. "network.db").
+        const scopePrefix = nodeKey.slice(0, nodeKey.lastIndexOf('.'));
+        function fqEndpoint(pathSegs) {
+          if (!pathSegs?.length) return null;
+          const vals = pathSegs.map(s => Object.values(s)[0]?.value?.[0]?.string);
+          if (vals.some(v => !v)) return null;
+          if (vals[0] === leaf) {
+            // Moved node itself, or a child of it (e.g. api.thing)
+            return newKey + (vals.length > 1 ? '.' + vals.slice(1).join('.') : '');
+          }
+          return scopePrefix + '.' + vals.join('.');
+        }
+
+        const declInfo = findMapKeyAt(ast.nodes, declKeyR.start);
+        if (!declInfo) { showToast('Could not locate declaration in AST'); return; }
+        const fullDeclR = declInfo.r;
 
         const src = editor.value;
-        // Value suffix = everything in the declaration after the key token (e.g. ": API Server")
         const keyLen = declKeyR.end - declKeyR.start;
         const valueSuffix = src.slice(fullDeclR.start + keyLen, fullDeclR.end);
 
-        // Full line extent: back to start of line, forward past trailing \n
-        let removeStart = fullDeclR.start;
-        while (removeStart > 0 && src[removeStart - 1] !== '\n') removeStart--;
-        const nlPos = src.indexOf('\n', fullDeclR.end - 1);
-        const removeEnd = nlPos === -1 ? src.length : nlPos + 1;
+        // Helper: full-line removal range (strip leading whitespace + trailing \n)
+        function lineRange(r) {
+          let start = r.start;
+          while (start > 0 && src[start - 1] !== '\n') start--;
+          const nl = src.indexOf('\n', r.end - 1);
+          return { start, end: nl === -1 ? src.length : nl + 1 };
+        }
 
-        // Cross-scope refs (fully-qualified path = nodeKey) — updates edge/attribute refs
-        const edits = [];
+        const declLineR = lineRange(fullDeclR);
+        const edgeSegLookup = buildEdgeSegLookup(ast.nodes);
+
+        const edits = [];          // source removals / cross-scope substitutions
+        const appendLines = [newKey + valueSuffix]; // new lines to add at end
+        const processedEdges = new Set(); // deduplicate edges (self-loops, etc.)
+
         for (const ref of (objToCheck.references || [])) {
           if (ref.map_key_edge_index === -1) continue; // declaration handled separately
           const segs = ref.key?.path;
           if (!segs?.length) continue;
           const kpi = Math.min(ref.key_path_index ?? 0, segs.length - 1);
           const joined = segs.slice(0, kpi + 1).map(segVal).filter(Boolean).join('.');
-          if (joined !== nodeKey) continue;
-          const startR = parseD2Range(Object.values(segs[0])[0]?.range);
-          const endR   = parseD2Range(Object.values(segs[kpi])[0]?.range);
-          if (!startR || !endR) continue;
-          edits.push({ start: startR.start, end: endR.end, replacement: newKey });
+
+          if (joined === nodeKey) {
+            // Cross-scope fully-qualified ref: simple byte substitution
+            const startR = parseD2Range(Object.values(segs[0])[0]?.range);
+            const endR   = parseD2Range(Object.values(segs[kpi])[0]?.range);
+            if (startR && endR) edits.push({ start: startR.start, end: endR.end, replacement: newKey });
+          } else {
+            // Scope-relative ref inside the block: extract, re-qualify, and relocate
+            const segByte = parseD2Range(Object.values(segs[0])[0]?.range)?.start;
+            if (segByte == null) continue;
+            const edgeInfo = edgeSegLookup.get(segByte);
+            if (!edgeInfo) continue;
+            const { mk: edgeMk, r: edgeMkR } = edgeInfo;
+            if (processedEdges.has(edgeMkR.start)) continue;
+            processedEdges.add(edgeMkR.start);
+
+            const edge = edgeMk.edges?.[ref.map_key_edge_index];
+            if (!edge) continue;
+
+            // Rewrite the edge text with fully-qualified endpoint names.
+            // Apply segment substitutions right-to-left inside the edge text so
+            // earlier byte offsets stay valid while replacing later ones first.
+            const segSubsts = [];
+            for (const pathSegs of [edge.src?.path, edge.dst?.path]) {
+              if (!pathSegs?.length) continue;
+              const first = parseD2Range(Object.values(pathSegs[0])[0]?.range);
+              const last  = parseD2Range(Object.values(pathSegs[pathSegs.length - 1])[0]?.range);
+              const fq = fqEndpoint(pathSegs);
+              if (first && last && fq) segSubsts.push({ start: first.start, end: last.end, fq });
+            }
+            segSubsts.sort((a, b) => b.start - a.start);
+            let edgeText = src.slice(edgeMkR.start, edgeMkR.end);
+            for (const { start, end, fq } of segSubsts) {
+              const s = start - edgeMkR.start, e = end - edgeMkR.start;
+              edgeText = edgeText.slice(0, s) + fq + edgeText.slice(e);
+            }
+
+            const edgeLineR = lineRange(edgeMkR);
+            edits.push({ start: edgeLineR.start, end: edgeLineR.end, replacement: '' });
+            appendLines.push(edgeText);
+          }
         }
 
-        // Check for scope-relative refs inside the block that we can't safely rename
-        const hasUnhandledRefs = (objToCheck.references || []).some(r => {
-          if (r.map_key_edge_index === -1) return false;
-          const segs = r.key?.path;
-          if (!segs?.length) return false;
-          const kpi = Math.min(r.key_path_index ?? 0, segs.length - 1);
-          const joined = segs.slice(0, kpi + 1).map(segVal).filter(Boolean).join('.');
-          return joined !== nodeKey;
-        });
-
-        edits.push({ start: removeStart, end: removeEnd, replacement: '' });
+        edits.push({ start: declLineR.start, end: declLineR.end, replacement: '' });
         edits.sort((a, b) => b.start - a.start);
 
         pushUndo();
@@ -2257,10 +2326,8 @@ cache -> db: Sync
         for (const { start, end, replacement } of edits) {
           newSrc = newSrc.slice(0, start) + replacement + newSrc.slice(end);
         }
-        newSrc = newSrc.replace(/\n*$/, '') + '\n' + newKey + valueSuffix + '\n';
+        newSrc = newSrc.replace(/\n*$/, '') + '\n' + appendLines.join('\n') + '\n';
         applyEditedSource(newSrc);
-
-        if (hasUnhandledRefs) showToast('Moved — check references inside the original block');
         return;
       }
 
