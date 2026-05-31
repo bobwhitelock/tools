@@ -2130,27 +2130,59 @@ cache -> db: Sync
 
     function moveNode(nodeKey, newParentKey) {
       if (!lastCompiled?.graph?.objects) return;
-      const obj = lastCompiled.graph.objects.find(o => o.id === nodeKey);
-      if (!obj?.references?.length) { showToast('Node not found in graph'); return; }
+
+      // D2 range strings look like "index,LINE:COL:BYTE-LINE:COL:BYTE"
+      function parseD2Range(r) {
+        const m = String(r).match(/,\d+:\d+:(\d+)-\d+:\d+:(\d+)/);
+        return m ? { start: +m[1], end: +m[2] } : null;
+      }
+
+      // Extract the text value from a D2 path segment object
+      // (e.g. { unquoted_string: { range: "...", value: [{ string: "api" }] } })
+      function segVal(seg) {
+        return Object.values(seg)[0]?.value?.[0]?.string ?? null;
+      }
+
+      // nodeKey is the SVG/diagram fully-qualified id (e.g. "network.api").
+      // graph.objects use short/relative ids, so we match by scanning references
+      // for any ref whose path[0..kpi] spells out nodeKey.
+      let targetObj = null;
+      for (const obj of lastCompiled.graph.objects) {
+        for (const ref of (obj.references || [])) {
+          const segs = ref.key?.path;
+          if (!segs?.length) continue;
+          const kpi = Math.min(ref.key_path_index ?? 0, segs.length - 1);
+          if (kpi !== segs.length - 1) continue; // only full-key refs for identification
+          const joined = segs.slice(0, kpi + 1).map(segVal).filter(Boolean).join('.');
+          if (joined === nodeKey) { targetObj = obj; break; }
+        }
+        if (targetObj) break;
+      }
+
+      if (!targetObj) {
+        // Block-scope nodes (declared inside `container: { node: ... }` braces) store
+        // references as single-segment short names; byte substitution can't relocate them.
+        showToast('Block-scope node — convert to dot notation first (e.g. ' + nodeKey + ': ...)');
+        return;
+      }
 
       const leaf = nodeKey.includes('.') ? nodeKey.slice(nodeKey.lastIndexOf('.') + 1) : nodeKey;
       const newKey = newParentKey ? newParentKey + '.' + leaf : leaf;
-      if (newKey === nodeKey) return;
+      if (newKey === nodeKey) { resetInteraction(); return; }
 
-      // Build text edits from every reference: replace path segments [0..key_path_index]
-      // with the new key. Byte offsets come from compile()'s UTF-16 positions ≈ JS indices.
+      // Build edits: for each ref, replace path[0..kpi] bytes with newKey.
+      // This covers declarations, edges, and sub-key prefixes (e.g. network.api.style).
       const edits = [];
-      for (const ref of obj.references) {
-        const segments = ref.key?.path;
-        if (!segments?.length) continue;
-        const pathIndex = Math.min(ref.key_path_index ?? 0, segments.length - 1);
-        // Segment byte ranges may live at .unbox.range or directly at .range
-        const segByte = (seg, which) =>
-          seg?.unbox?.range?.[which]?.byte ?? seg?.range?.[which]?.byte ?? null;
-        const start = segByte(segments[0], 'start');
-        const end   = segByte(segments[pathIndex], 'end');
-        if (start == null || end == null) continue;
-        edits.push({ start, end, replacement: newKey });
+      for (const ref of targetObj.references) {
+        const segs = ref.key?.path;
+        if (!segs?.length) continue;
+        const kpi = Math.min(ref.key_path_index ?? 0, segs.length - 1);
+        const joined = segs.slice(0, kpi + 1).map(segVal).filter(Boolean).join('.');
+        if (joined !== nodeKey) continue; // skip scope-relative short-form refs
+        const startR = parseD2Range(Object.values(segs[0])[0]?.range);
+        const endR   = parseD2Range(Object.values(segs[kpi])[0]?.range);
+        if (!startR || !endR) continue;
+        edits.push({ start: startR.start, end: endR.end, replacement: newKey });
       }
 
       if (!edits.length) { showToast('Could not locate source references'); return; }
