@@ -2158,14 +2158,14 @@ cache -> db: Sync
 
     // ── Source mutations ────────────────────────────────────────────────────────
 
-    function applyAndRender(newSrc) {
+    function applyEditedSource(newSrc) {
       editor.value = newSrc;
       commitSnap(); saveSource(newSrc); syncControls(newSrc); scheduleRender();
     }
 
     function addConnection(srcKey, dstKey) {
       pushUndo();
-      applyAndRender(editor.value.replace(/\n*$/, '') + '\n' + srcKey + ' -> ' + dstKey + '\n');
+      applyEditedSource(editor.value.replace(/\n*$/, '') + '\n' + srcKey + ' -> ' + dstKey + '\n');
     }
 
     function moveNode(nodeKey, newParentKey) {
@@ -2201,7 +2201,7 @@ cache -> db: Sync
       for (const { start, end, replacement } of edits) {
         src = src.slice(0, start) + replacement + src.slice(end);
       }
-      applyAndRender(src);
+      applyEditedSource(src);
     }
 
     // ── Touch path (mobile) ─────────────────────────────────────────────────────
