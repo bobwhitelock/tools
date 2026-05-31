@@ -2252,7 +2252,20 @@ cache -> db: Sync
 
         const src = editor.value;
         const keyLen = declKeyR.end - declKeyR.start;
-        const valueSuffix = src.slice(fullDeclR.start + keyLen, fullDeclR.end);
+
+        // Strip original indentation from multi-line block values so the declaration
+        // looks correct at the top level. e.g. "api: {\n    sub: …\n  }" (indented 2)
+        // becomes "api: {\n  sub: …\n}" when placed at column 0.
+        let lineStart = fullDeclR.start;
+        while (lineStart > 0 && src[lineStart - 1] !== '\n') lineStart--;
+        const declIndent = fullDeclR.start - lineStart;
+        let valueSuffix = src.slice(fullDeclR.start + keyLen, fullDeclR.end);
+        if (declIndent > 0 && valueSuffix.includes('\n')) {
+          const pad = ' '.repeat(declIndent);
+          valueSuffix = valueSuffix.split('\n').map((line, i) =>
+            i === 0 ? line : line.startsWith(pad) ? line.slice(declIndent) : line.trimStart()
+          ).join('\n');
+        }
 
         // Helper: full-line removal range (strip leading whitespace + trailing \n)
         function lineRange(r) {
