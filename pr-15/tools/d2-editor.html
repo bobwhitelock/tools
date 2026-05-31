@@ -539,6 +539,12 @@
     .preview-area svg g[data-d2key].d2-drag-target > path {
       stroke: #22c55e !important; stroke-width: 3 !important;
     }
+    /* Drop on a container (reparent) = blue */
+    .preview-area svg g[data-d2key].d2-drag-reparent .shape > *,
+    .preview-area svg g[data-d2key].d2-drag-reparent > rect,
+    .preview-area svg g[data-d2key].d2-drag-reparent > path {
+      stroke: #3b82f6 !important; stroke-width: 3 !important;
+    }
     /* Small key readout shown when a node is hovered/selected */
     .d2-key-readout {
       position: absolute; top: 8px; left: 8px; z-index: 5;
@@ -2066,9 +2072,7 @@ cache -> db: Sync
       keyReadout.classList.remove('show');
     }
 
-    // ── Drag-to-connect ────────────────────────────────────────────────────────
-
-    let dragState = null;
+    // ── Shared interaction helpers ──────────────────────────────────────────────
 
     function clientToSvg(svgEl, cx, cy) {
       const pt = svgEl.createSVGPoint();
@@ -2077,50 +2081,41 @@ cache -> db: Sync
       return inv ? pt.matrixTransform(inv) : null;
     }
 
-    function setDragTarget(el) {
-      if (dragState.targetEl === el) return;
-      if (dragState.targetEl) dragState.targetEl.classList.remove('d2-drag-target');
-      dragState.targetEl = el;
-      if (el) el.classList.add('d2-drag-target');
+    function showElementKey(g) {
+      clearHover();
+      g.classList.add('d2-hover');
+      const isConn = g.dataset.d2kind === 'conn';
+      keyReadout.textContent = (isConn ? 'edge: ' : 'node: ') + g.dataset.d2key;
+      keyReadout.classList.add('show');
+      showToast((isConn ? 'Edge: ' : 'Node: ') + g.dataset.d2key);
     }
 
-    function teardownDrag() {
-      if (!dragState) return;
-      if (dragState.tempLine) dragState.tempLine.remove();
-      if (dragState.targetEl) dragState.targetEl.classList.remove('d2-drag-target');
-      dragState.srcEl.classList.remove('d2-drag-src');
-      try { previewContent.releasePointerCapture(dragState.pointerId); } catch {}
-      dragState = null;
-    }
-
-    function addConnection(srcKey, dstKey) {
-      pushUndo();
-      editor.value = editor.value.replace(/\n*$/, '') + '\n' + srcKey + ' -> ' + dstKey + '\n';
-      commitSnap();
-      saveSource(editor.value);
-      syncControls(editor.value);
-      scheduleRender();
-    }
-
-    // ── Helpers shared by both input paths ─────────────────────────────────────
-
-    function makeTempLine(svgEl, x, y) {
+    function startDrag(g, svgEl, cx, cy) {
+      const startPt = clientToSvg(svgEl, cx, cy);
+      if (!startPt) return null;
       const ns = 'http://www.w3.org/2000/svg';
       const line = document.createElementNS(ns, 'line');
-      line.setAttribute('x1', x); line.setAttribute('y1', y);
-      line.setAttribute('x2', x); line.setAttribute('y2', y);
+      line.setAttribute('x1', startPt.x); line.setAttribute('y1', startPt.y);
+      line.setAttribute('x2', startPt.x); line.setAttribute('y2', startPt.y);
       line.setAttribute('stroke', '#f59e0b');
       line.setAttribute('stroke-width', '2');
       line.setAttribute('stroke-dasharray', '6 3');
       line.setAttribute('pointer-events', 'none');
       line.style.display = 'none';
       svgEl.appendChild(line);
-      return line;
+      return { srcKey: g.dataset.d2key, srcEl: g, svgEl, tempLine: line,
+               startClient: { x: cx, y: cy }, isDragging: false, targetEl: null };
     }
 
-    function updateDragLine(state, cx, cy) {
-      const dx = cx - state.startClient.x;
-      const dy = cy - state.startClient.y;
+    function cancelDrag(state) {
+      state.tempLine.remove();
+      if (state.targetEl) state.targetEl.classList.remove('d2-drag-target', 'd2-drag-reparent');
+      state.srcEl.classList.remove('d2-drag-src');
+      clearHover();
+    }
+
+    function updateDrag(state, cx, cy) {
+      const dx = cx - state.startClient.x, dy = cy - state.startClient.y;
       if (!state.isDragging && Math.hypot(dx, dy) < 8) return;
       if (!state.isDragging) {
         state.isDragging = true;
@@ -2129,40 +2124,89 @@ cache -> db: Sync
         clearHover();
       }
       const pt = clientToSvg(state.svgEl, cx, cy);
-      if (pt) {
-        state.tempLine.setAttribute('x2', pt.x);
-        state.tempLine.setAttribute('y2', pt.y);
-      }
+      if (pt) { state.tempLine.setAttribute('x2', pt.x); state.tempLine.setAttribute('y2', pt.y); }
+
       const underEl = document.elementFromPoint(cx, cy);
       const targetG = nodeFromPoint(underEl);
       const validTarget = targetG && targetG !== state.srcEl && targetG.dataset.d2kind === 'shape'
         ? targetG : null;
+      const isContainer = validTarget && validTarget.querySelectorAll('g[data-d2key]').length > 0;
+
       if (state.targetEl !== validTarget) {
-        if (state.targetEl) state.targetEl.classList.remove('d2-drag-target');
+        if (state.targetEl) state.targetEl.classList.remove('d2-drag-target', 'd2-drag-reparent');
         state.targetEl = validTarget;
-        if (validTarget) validTarget.classList.add('d2-drag-target');
+        if (validTarget) validTarget.classList.add(isContainer ? 'd2-drag-reparent' : 'd2-drag-target');
       }
-      state.tempLine.setAttribute('stroke', validTarget ? '#22c55e' : '#f59e0b');
+      // Line: orange = no target, green = connect, blue = reparent into container
+      state.tempLine.setAttribute('stroke',
+        !validTarget ? '#f59e0b' : isContainer ? '#3b82f6' : '#22c55e');
     }
 
     function commitDrag(state) {
-      state.tempLine.remove();
-      if (state.targetEl) state.targetEl.classList.remove('d2-drag-target');
-      state.srcEl.classList.remove('d2-drag-src');
-      clearHover();
-      if (state.isDragging) {
-        if (state.targetEl) addConnection(state.srcKey, state.targetEl.dataset.d2key);
-      } else {
-        state.srcEl.classList.add('d2-hover');
-        keyReadout.textContent = 'node: ' + state.srcKey;
-        keyReadout.classList.add('show');
-        showToast('Element key: ' + state.srcKey);
+      cancelDrag(state);
+      if (!state.isDragging) { showElementKey(state.srcEl); return; }
+      if (state.targetEl) {
+        const isContainer = state.targetEl.querySelectorAll('g[data-d2key]').length > 0;
+        isContainer
+          ? moveNode(state.srcKey, state.targetEl.dataset.d2key)
+          : addConnection(state.srcKey, state.targetEl.dataset.d2key);
+      } else if (state.srcKey.includes('.')) {
+        // Dropped on empty space while nested → move to top level
+        moveNode(state.srcKey, null);
       }
     }
 
+    // ── Source mutations ────────────────────────────────────────────────────────
+
+    function applyAndRender(newSrc) {
+      editor.value = newSrc;
+      commitSnap(); saveSource(newSrc); syncControls(newSrc); scheduleRender();
+    }
+
+    function addConnection(srcKey, dstKey) {
+      pushUndo();
+      applyAndRender(editor.value.replace(/\n*$/, '') + '\n' + srcKey + ' -> ' + dstKey + '\n');
+    }
+
+    function moveNode(nodeKey, newParentKey) {
+      if (!lastCompiled?.graph?.objects) return;
+      const obj = lastCompiled.graph.objects.find(o => o.id === nodeKey);
+      if (!obj?.references?.length) { showToast('Node not found in graph'); return; }
+
+      const leaf = nodeKey.includes('.') ? nodeKey.slice(nodeKey.lastIndexOf('.') + 1) : nodeKey;
+      const newKey = newParentKey ? newParentKey + '.' + leaf : leaf;
+      if (newKey === nodeKey) return;
+
+      // Build text edits from every reference: replace path segments [0..key_path_index]
+      // with the new key. Byte offsets come from compile()'s UTF-16 positions ≈ JS indices.
+      const edits = [];
+      for (const ref of obj.references) {
+        const segments = ref.key?.path;
+        if (!segments?.length) continue;
+        const pathIndex = Math.min(ref.key_path_index ?? 0, segments.length - 1);
+        // Segment byte ranges may live at .unbox.range or directly at .range
+        const segByte = (seg, which) =>
+          seg?.unbox?.range?.[which]?.byte ?? seg?.range?.[which]?.byte ?? null;
+        const start = segByte(segments[0], 'start');
+        const end   = segByte(segments[pathIndex], 'end');
+        if (start == null || end == null) continue;
+        edits.push({ start, end, replacement: newKey });
+      }
+
+      if (!edits.length) { showToast('Could not locate source references'); return; }
+      edits.sort((a, b) => b.start - a.start); // right-to-left keeps earlier offsets valid
+
+      pushUndo();
+      let src = editor.value;
+      for (const { start, end, replacement } of edits) {
+        src = src.slice(0, start) + replacement + src.slice(end);
+      }
+      applyAndRender(src);
+    }
+
     // ── Touch path (mobile) ─────────────────────────────────────────────────────
-    // Touch events are handled separately from mouse events to avoid the
-    // cross-browser mess of pointer events + passive scroll containers.
+    // Touch events are used directly (not pointer events) to avoid the
+    // passive-scroll-container / pointercancel cross-browser mess.
 
     let touchState = null;
 
@@ -2170,31 +2214,13 @@ cache -> db: Sync
       if (touchState) return;
       const g = nodeFromPoint(e.target);
       if (!g) return; // empty space — let browser scroll
-
-      e.preventDefault(); // claim this touch; stops scroll & long-press selection
-
-      if (g.dataset.d2kind === 'conn') {
-        clearHover();
-        g.classList.add('d2-hover');
-        keyReadout.textContent = 'edge: ' + g.dataset.d2key;
-        keyReadout.classList.add('show');
-        showToast('Edge: ' + g.dataset.d2key);
-        return;
-      }
-
+      e.preventDefault(); // claim touch: stops scroll + long-press text selection
+      if (g.dataset.d2kind !== 'shape') { showElementKey(g); return; }
       const svgEl = previewContent.querySelector('svg');
       if (!svgEl) return;
       const t = e.changedTouches[0];
-      const startPt = clientToSvg(svgEl, t.clientX, t.clientY);
-      if (!startPt) return;
-
-      touchState = {
-        id: t.identifier,
-        srcKey: g.dataset.d2key, srcEl: g, svgEl,
-        tempLine: makeTempLine(svgEl, startPt.x, startPt.y),
-        startClient: { x: t.clientX, y: t.clientY },
-        isDragging: false, targetEl: null,
-      };
+      const state = startDrag(g, svgEl, t.clientX, t.clientY);
+      if (state) touchState = Object.assign(state, { id: t.identifier });
     }, { passive: false });
 
     previewContent.addEventListener('touchmove', (e) => {
@@ -2202,30 +2228,26 @@ cache -> db: Sync
       const t = [...e.changedTouches].find(x => x.identifier === touchState.id);
       if (!t) return;
       e.preventDefault();
-      updateDragLine(touchState, t.clientX, t.clientY);
+      updateDrag(touchState, t.clientX, t.clientY);
     }, { passive: false });
 
-    previewContent.addEventListener('touchend', (e) => {
+    previewContent.addEventListener('touchend', () => {
       if (!touchState) return;
-      const state = touchState;
-      touchState = null;
+      const state = touchState; touchState = null;
       commitDrag(state);
     });
 
     previewContent.addEventListener('touchcancel', () => {
       if (!touchState) return;
-      touchState.tempLine.remove();
-      if (touchState.targetEl) touchState.targetEl.classList.remove('d2-drag-target');
-      touchState.srcEl.classList.remove('d2-drag-src');
-      touchState = null;
-      clearHover();
+      cancelDrag(touchState); touchState = null;
     });
 
     // ── Mouse path (desktop) ────────────────────────────────────────────────────
 
+    let dragState = null;
+
     previewContent.addEventListener('pointermove', (e) => {
-      if (e.pointerType !== 'mouse') return;
-      if (dragState) return; // drag is handled by document listeners below
+      if (e.pointerType !== 'mouse' || dragState) return;
       const g = nodeFromPoint(e.target);
       if (!g) { clearHover(); return; }
       if (!g.classList.contains('d2-hover')) { clearHover(); g.classList.add('d2-hover'); }
@@ -2236,52 +2258,29 @@ cache -> db: Sync
       if (e.pointerType !== 'mouse' || dragState) return;
       clearHover();
     });
-
     previewContent.addEventListener('pointerdown', (e) => {
       if (e.pointerType !== 'mouse' || e.button !== 0 || dragState) return;
       const g = nodeFromPoint(e.target);
       if (!g || g.dataset.d2kind !== 'shape') return;
       const svgEl = previewContent.querySelector('svg');
       if (!svgEl) return;
-      const startPt = clientToSvg(svgEl, e.clientX, e.clientY);
-      if (!startPt) return;
-      dragState = {
-        srcKey: g.dataset.d2key, srcEl: g, svgEl,
-        tempLine: makeTempLine(svgEl, startPt.x, startPt.y),
-        startClient: { x: e.clientX, y: e.clientY },
-        isDragging: false, targetEl: null,
-      };
-      e.preventDefault();
+      dragState = startDrag(g, svgEl, e.clientX, e.clientY);
+      if (dragState) e.preventDefault();
     });
-
-    // Mouse drag tracked on document so it works even if pointer leaves preview.
+    // Track mouse drag on document so it keeps working outside the preview area.
     document.addEventListener('mousemove', (e) => {
-      if (!dragState) return;
-      updateDragLine(dragState, e.clientX, e.clientY);
+      if (dragState) updateDrag(dragState, e.clientX, e.clientY);
     });
-    document.addEventListener('mouseup', (e) => {
+    document.addEventListener('mouseup', () => {
       if (!dragState) return;
-      const state = dragState;
-      dragState = null;
+      const state = dragState; dragState = null;
       commitDrag(state);
     });
-
-    // click handles edge taps and shape taps on desktop.
+    // click: identify any element on desktop (edges need this; shapes get it from mouseup too).
     previewContent.addEventListener('click', (e) => {
       if (dragState) return;
       const g = nodeFromPoint(e.target);
-      if (!g) return;
-      clearHover();
-      g.classList.add('d2-hover');
-      if (g.dataset.d2kind === 'conn') {
-        keyReadout.textContent = 'edge: ' + g.dataset.d2key;
-        keyReadout.classList.add('show');
-        showToast('Edge: ' + g.dataset.d2key);
-      } else {
-        keyReadout.textContent = 'node: ' + g.dataset.d2key;
-        keyReadout.classList.add('show');
-        showToast('Element key: ' + g.dataset.d2key);
-      }
+      if (g) showElementKey(g);
     });
 
     // ─── Export helpers ───────────────────────────────────────────────────────
