@@ -1553,10 +1553,6 @@ cache -> db: Sync
     // and collapse runs of 3+ blank lines. D2 uses {} for nesting so indentation
     // is purely cosmetic; blank lines are visual separators only.
     function normalizeD2Source(src) {
-      return src.replace(/^[ \t]+|[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
-    }
-
-    function semanticD2Source(src) {
       return src.split('\n').map(l => l.trim()).filter(l => l.length > 0).join('\n');
     }
 
@@ -1691,7 +1687,7 @@ cache -> db: Sync
     /** Push the current editor value onto the undo stack (before a programmatic change). */
     function pushUndo() {
       const prev = undoStack[undoStack.length - 1] ?? snapValue;
-      if (semanticD2Source(editor.value) === semanticD2Source(prev)) return;
+      if (normalizeD2Source(editor.value) === normalizeD2Source(prev)) return;
       undoStack.push(editor.value);
       if (undoStack.length > MAX_UNDO) undoStack.shift();
       redoStack.length = 0;
@@ -1711,7 +1707,7 @@ cache -> db: Sync
       snapTimer = setTimeout(() => {
         const v = editor.value;
         if (v === snapValue) return;
-        if (semanticD2Source(v) !== semanticD2Source(snapValue)) {
+        if (normalizeD2Source(v) !== normalizeD2Source(snapValue)) {
           undoStack.push(snapValue);
           if (undoStack.length > MAX_UNDO) undoStack.shift();
           redoStack.length = 0;
