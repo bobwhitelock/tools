@@ -1686,6 +1686,8 @@ cache -> db: Sync
 
     /** Push the current editor value onto the undo stack (before a programmatic change). */
     function pushUndo() {
+      const prev = undoStack[undoStack.length - 1] ?? snapValue;
+      if (normalizeD2Source(editor.value) === normalizeD2Source(prev)) return;
       undoStack.push(editor.value);
       if (undoStack.length > MAX_UNDO) undoStack.shift();
       redoStack.length = 0;
@@ -1704,13 +1706,15 @@ cache -> db: Sync
       clearTimeout(snapTimer);
       snapTimer = setTimeout(() => {
         const v = editor.value;
-        if (v !== snapValue) {
+        if (v === snapValue) return;
+        if (normalizeD2Source(v) !== normalizeD2Source(snapValue)) {
           undoStack.push(snapValue);
           if (undoStack.length > MAX_UNDO) undoStack.shift();
           redoStack.length = 0;
-          snapValue = v;
           syncUndoButtons();
         }
+        // Always advance the baseline so semantically-equivalent edits don't accumulate.
+        snapValue = v;
       }, 400);
     }
 
