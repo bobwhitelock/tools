@@ -1553,7 +1553,7 @@ cache -> db: Sync
     // and collapse runs of 3+ blank lines. D2 uses {} for nesting so indentation
     // is purely cosmetic; blank lines are visual separators only.
     function normalizeD2Source(src) {
-      return src.replace(/^[ \t]+|[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+      return src.split('\n').map(l => l.trim()).filter(l => l.length > 0).join('\n');
     }
 
     function showSpinner(show) {
@@ -1564,7 +1564,13 @@ cache -> db: Sync
     function applyCachedRender(source) {
       const key = normalizeD2Source(source);
       if (!renderCache.has(key)) return false;
-      const { svg, compiled } = renderCache.get(key);
+      const cached = renderCache.get(key);
+      if (cached.error) {
+        previewContent.innerHTML = `<div class="preview-error">${escHtml(cached.error)}</div>`;
+        setStatus('error', 'Error');
+        return true;
+      }
+      const { svg, compiled } = cached;
       currentSvg = svg;
       lastCompiled = compiled;
       previewContent.innerHTML = svg;
@@ -1583,26 +1589,37 @@ cache -> db: Sync
 
     async function doRender(source) {
       if (!d2) return;
+      if (rendering) {
+        // A render is already in flight; schedule another pass after it finishes.
+        clearTimeout(renderTimer);
+        renderTimer = setTimeout(() => doRender(editor.value), DEBOUNCE_MS);
+        return;
+      }
       rendering = true;
       showSpinner(true);
       try {
         const key = normalizeD2Source(source);
         if (!renderCache.has(key)) {
-          const compiled = await d2.compile(source);
-          const svg = await d2.render(compiled.diagram, compiled.renderOptions);
-          if (renderCache.size >= RENDER_CACHE_MAX) {
-            renderCache.delete(renderCache.keys().next().value); // evict oldest
+          try {
+            const compiled = await d2.compile(source);
+            const svg = await d2.render(compiled.diagram, compiled.renderOptions);
+            if (renderCache.size >= RENDER_CACHE_MAX) {
+              renderCache.delete(renderCache.keys().next().value); // evict oldest
+            }
+            renderCache.set(key, { svg, compiled });
+          } catch (err) {
+            const msg = (err && err.message) ? err.message : String(err);
+            renderCache.set(key, { error: msg });
           }
-          renderCache.set(key, { svg, compiled });
         }
-        applyCachedRender(source);
-      } catch (err) {
-        const msg = (err && err.message) ? err.message : String(err);
-        previewContent.innerHTML = `<div class="preview-error">${escHtml(msg)}</div>`;
-        setStatus('error', 'Error');
       } finally {
         rendering = false;
         showSpinner(false);
+      }
+      // Show whatever corresponds to the current editor value.
+      // If it's not cached yet (source changed while we were rendering), schedule another pass.
+      if (!applyCachedRender(editor.value)) {
+        scheduleRender();
       }
     }
 
@@ -1669,6 +1686,8 @@ cache -> db: Sync
 
     /** Push the current editor value onto the undo stack (before a programmatic change). */
     function pushUndo() {
+      const prev = undoStack[undoStack.length - 1] ?? snapValue;
+      if (normalizeD2Source(editor.value) === normalizeD2Source(prev)) return;
       undoStack.push(editor.value);
       if (undoStack.length > MAX_UNDO) undoStack.shift();
       redoStack.length = 0;
@@ -1687,13 +1706,15 @@ cache -> db: Sync
       clearTimeout(snapTimer);
       snapTimer = setTimeout(() => {
         const v = editor.value;
-        if (v !== snapValue) {
+        if (v === snapValue) return;
+        if (normalizeD2Source(v) !== normalizeD2Source(snapValue)) {
           undoStack.push(snapValue);
           if (undoStack.length > MAX_UNDO) undoStack.shift();
           redoStack.length = 0;
-          snapValue = v;
           syncUndoButtons();
         }
+        // Always advance the baseline so semantically-equivalent edits don't accumulate.
+        snapValue = v;
       }, 400);
     }
 
