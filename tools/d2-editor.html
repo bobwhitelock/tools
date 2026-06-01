@@ -572,6 +572,30 @@
     .d2-action-menu button:hover { background: #373e47; }
     .d2-action-menu button.d2-act-x { padding: 6px 9px; color: #8b949e; }
 
+    /* Floating label popup (appears near target node after connect) */
+    .d2-label-popup {
+      position: fixed; z-index: 30; display: none;
+      align-items: center; gap: 4px;
+      background: #1f2330; border: 1px solid #30363d; border-radius: 8px;
+      padding: 4px; box-shadow: 0 4px 14px rgba(0,0,0,.45);
+    }
+    .d2-label-popup.show { display: flex; }
+    .d2-label-input {
+      height: 28px; width: 140px;
+      border: 1px solid #444c56; border-radius: 6px;
+      padding: 0 8px; font-size: 13px; font-family: inherit;
+      background: #2d333b; color: #c9d1d9; outline: none;
+    }
+    .d2-label-input:focus { border-color: var(--accent); }
+    .d2-label-input::placeholder { color: #8b949e; }
+    .d2-label-confirm {
+      background: #2d333b; color: #c9d1d9; border: 1px solid #444c56;
+      border-radius: 6px; padding: 5px 8px; cursor: pointer;
+      display: flex; align-items: center;
+    }
+    .d2-label-confirm:hover { background: #373e47; }
+    .d2-label-confirm svg { width: 14px; height: 14px; }
+
     /* Status bar shown while picking a target */
     .d2-action-bar {
       position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
@@ -891,7 +915,7 @@
     .gh-pr-link.hidden { display: none; }
 
     /* ── Desktop-only elements (hidden on mobile) ─── */
-    .desktop-only    { display: none; }
+    .desktop-only    { display: none !important; }
     .manage-header   { display: none; justify-content: flex-end; margin-bottom: 8px; flex-shrink: 0; }
     .manage-backdrop { display: none; position: fixed; inset: 0; z-index: 99; }
 
@@ -937,7 +961,7 @@
 
     /* ── Desktop layout (≥768px) ────────────────────── */
     @media (min-width: 768px) {
-      .desktop-only  { display: flex; }
+      .desktop-only  { display: flex !important; }
       .manage-header { display: flex; }
       .manage-backdrop { display: block; }
       .manage-backdrop.hidden { display: none; }
@@ -1295,6 +1319,17 @@
     </div>
   </div>
 
+  <!-- Floating label popup (shown near target node when connecting) -->
+  <div id="d2-label-popup" class="d2-label-popup">
+    <input id="d2-label-input" class="d2-label-input" type="text"
+      placeholder="Label (optional)" autocomplete="off" spellcheck="false" autocorrect="off" />
+    <button id="d2-label-confirm" class="d2-label-confirm" title="Add connection">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+    </button>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script type="module">
@@ -1306,7 +1341,7 @@
     // ─── Constants ────────────────────────────────────────────────────────────
 
     const LS_KEY       = 'd2-editor-source';
-    const DEBOUNCE_MS  = 700;
+    const DEBOUNCE_MS  = 300;
 
     const DEFAULT_SOURCE =
 `vars: {
@@ -1334,6 +1369,9 @@ cache -> db: Sync
     let renderTimer = null;
     let rendering   = false;
     let lastCompiled = null; // Last successful d2.compile() result (graph + diagram)
+
+    const RENDER_CACHE_MAX = 100;
+    const renderCache = new Map();  // normalizedSource → { svg, compiled }
 
     // ─── GitHub state ─────────────────────────────────────────────────────────
 
@@ -1511,8 +1549,36 @@ cache -> db: Sync
 
     // ─── Rendering ────────────────────────────────────────────────────────────
 
+    // Normalise D2 source for cache keying: strip trailing whitespace per line
+    // and collapse runs of 3+ blank lines. D2 uses {} for nesting so indentation
+    // is purely cosmetic; blank lines are visual separators only.
+    function normalizeD2Source(src) {
+      return src.replace(/^[ \t]+|[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+    }
+
     function showSpinner(show) {
       spinnerEl.classList.toggle('hidden', !show);
+    }
+
+    // Apply a cached render result synchronously. Returns true on cache hit.
+    function applyCachedRender(source) {
+      const key = normalizeD2Source(source);
+      if (!renderCache.has(key)) return false;
+      const { svg, compiled } = renderCache.get(key);
+      currentSvg = svg;
+      lastCompiled = compiled;
+      previewContent.innerHTML = svg;
+      const svgEl = previewContent.querySelector('svg');
+      if (svgEl) {
+        svgEl.removeAttribute('width');
+        svgEl.removeAttribute('height');
+        svgEl.style.width  = '100%';
+        svgEl.style.height = 'auto';
+      }
+      tagShapeGroups(svgEl, compiled);
+      if (typeof resetInteraction === 'function') resetInteraction();
+      setStatus('ready', 'Ready');
+      return true;
     }
 
     async function doRender(source) {
@@ -1520,22 +1586,16 @@ cache -> db: Sync
       rendering = true;
       showSpinner(true);
       try {
-        const compiled = await d2.compile(source);
-        const svg = await d2.render(compiled.diagram, compiled.renderOptions);
-        currentSvg = svg;
-        lastCompiled = compiled;
-        previewContent.innerHTML = svg;
-        // Make SVG responsive
-        const svgEl = previewContent.querySelector('svg');
-        if (svgEl) {
-          svgEl.removeAttribute('width');
-          svgEl.removeAttribute('height');
-          svgEl.style.width  = '100%';
-          svgEl.style.height = 'auto';
+        const key = normalizeD2Source(source);
+        if (!renderCache.has(key)) {
+          const compiled = await d2.compile(source);
+          const svg = await d2.render(compiled.diagram, compiled.renderOptions);
+          if (renderCache.size >= RENDER_CACHE_MAX) {
+            renderCache.delete(renderCache.keys().next().value); // evict oldest
+          }
+          renderCache.set(key, { svg, compiled });
         }
-        tagShapeGroups(svgEl, compiled);  // annotate SVG nodes with their source keys
-        if (typeof resetInteraction === 'function') resetInteraction(); // SVG replaced — drop stale menu state
-        setStatus('ready', 'Ready');
+        applyCachedRender(source);
       } catch (err) {
         const msg = (err && err.message) ? err.message : String(err);
         previewContent.innerHTML = `<div class="preview-error">${escHtml(msg)}</div>`;
@@ -1548,8 +1608,7 @@ cache -> db: Sync
 
     function scheduleRender() {
       clearTimeout(renderTimer);
-      showSpinner(true);
-      setStatus('loading', 'Rendering…');
+      if (applyCachedRender(editor.value)) return; // instant cache hit — skip debounce and spinner
       renderTimer = setTimeout(() => doRender(editor.value), DEBOUNCE_MS);
     }
 
@@ -2157,9 +2216,10 @@ cache -> db: Sync
       commitSnap(); saveSource(newSrc); syncControls(newSrc); scheduleRender();
     }
 
-    function addConnection(srcKey, dstKey) {
+    function addConnection(srcKey, dstKey, label) {
       pushUndo();
-      applyEditedSource(editor.value.replace(/\n*$/, '') + '\n' + srcKey + ' -> ' + dstKey + '\n');
+      const edge = label ? `${srcKey} -> ${dstKey}: ${label}` : `${srcKey} -> ${dstKey}`;
+      applyEditedSource(editor.value.replace(/\n*$/, '') + '\n' + edge + '\n');
     }
 
     function moveNode(nodeKey, newParentKey) {
@@ -2442,6 +2502,7 @@ cache -> db: Sync
       previewContent.querySelectorAll('.d2-selected, .d2-action-src')
         .forEach(g => g.classList.remove('d2-selected', 'd2-action-src'));
       clearHover();
+      hideLabelPopup();
     }
 
     function openMenu(g) {
@@ -2480,8 +2541,8 @@ cache -> db: Sync
 
       if (type === 'connect') {
         if (!targetG || targetG === srcEl) return; // need a different node; keep waiting
-        addConnection(srcKey, targetKey);
         resetInteraction();
+        showLabelPopup(targetG, srcKey, targetKey);
         return;
       }
 
@@ -2643,6 +2704,46 @@ cache -> db: Sync
 
     // Close on backdrop tap
     modalEl.addEventListener('click', e => { if (e.target === modalEl) closeResetModal(); });
+
+    // ─── Connection label popup (floating, near target node) ─────────────────
+    const labelPopup = document.getElementById('d2-label-popup');
+    const labelInput = document.getElementById('d2-label-input');
+    let pendingConnKeys = null;
+
+    function showLabelPopup(targetG, srcKey, dstKey) {
+      pendingConnKeys = { srcKey, dstKey };
+      labelInput.value = '';
+      labelPopup.classList.add('show');
+      const pw = labelPopup.offsetWidth, ph = labelPopup.offsetHeight;
+      const r = targetG.getBoundingClientRect();
+      let left = r.left;
+      let top  = r.bottom + 6;
+      left = Math.max(6, Math.min(left, window.innerWidth  - pw - 6));
+      if (top + ph > window.innerHeight - 6) top = Math.max(6, r.top - ph - 6);
+      labelPopup.style.left = left + 'px';
+      labelPopup.style.top  = top  + 'px';
+      labelInput.focus();
+    }
+
+    function hideLabelPopup() {
+      labelPopup.classList.remove('show');
+      pendingConnKeys = null;
+    }
+
+    function confirmLabel() {
+      if (pendingConnKeys) {
+        const { srcKey, dstKey } = pendingConnKeys;
+        addConnection(srcKey, dstKey, labelInput.value.trim());
+      }
+      hideLabelPopup();
+    }
+
+    document.getElementById('d2-label-confirm').addEventListener('click', confirmLabel);
+
+    labelInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  confirmLabel();
+      if (e.key === 'Escape') hideLabelPopup();
+    });
 
     function applyReset(source, toastMsg) {
       closeResetModal();
