@@ -1368,7 +1368,6 @@ cache -> db: Sync
     let currentSvg = '';     // Last successfully rendered SVG string
     let renderTimer = null;
     let rendering   = false;
-    let renderGen   = 0;     // Incremented each time a render starts; stale renders are discarded
     let lastCompiled = null; // Last successful d2.compile() result (graph + diagram)
 
     const RENDER_CACHE_MAX = 100;
@@ -1565,7 +1564,13 @@ cache -> db: Sync
     function applyCachedRender(source) {
       const key = normalizeD2Source(source);
       if (!renderCache.has(key)) return false;
-      const { svg, compiled } = renderCache.get(key);
+      const cached = renderCache.get(key);
+      if (cached.error) {
+        previewContent.innerHTML = `<div class="preview-error">${escHtml(cached.error)}</div>`;
+        setStatus('error', 'Error');
+        return true;
+      }
+      const { svg, compiled } = cached;
       currentSvg = svg;
       lastCompiled = compiled;
       previewContent.innerHTML = svg;
@@ -1585,38 +1590,36 @@ cache -> db: Sync
     async function doRender(source) {
       if (!d2) return;
       if (rendering) {
-        // A render is already in flight; schedule another pass once it finishes
-        // so the latest source is always used.
+        // A render is already in flight; schedule another pass after it finishes.
         clearTimeout(renderTimer);
         renderTimer = setTimeout(() => doRender(editor.value), DEBOUNCE_MS);
         return;
       }
       rendering = true;
-      const gen = ++renderGen;
       showSpinner(true);
       try {
         const key = normalizeD2Source(source);
         if (!renderCache.has(key)) {
-          const compiled = await d2.compile(source);
-          const svg = await d2.render(compiled.diagram, compiled.renderOptions);
-          if (gen !== renderGen) return; // source changed while we were rendering; discard
-          if (renderCache.size >= RENDER_CACHE_MAX) {
-            renderCache.delete(renderCache.keys().next().value); // evict oldest
+          try {
+            const compiled = await d2.compile(source);
+            const svg = await d2.render(compiled.diagram, compiled.renderOptions);
+            if (renderCache.size >= RENDER_CACHE_MAX) {
+              renderCache.delete(renderCache.keys().next().value); // evict oldest
+            }
+            renderCache.set(key, { svg, compiled });
+          } catch (err) {
+            const msg = (err && err.message) ? err.message : String(err);
+            renderCache.set(key, { error: msg });
           }
-          renderCache.set(key, { svg, compiled });
         }
-        if (gen !== renderGen) return; // discard stale result
-        applyCachedRender(source);
-      } catch (err) {
-        if (gen !== renderGen) return; // discard stale error
-        const msg = (err && err.message) ? err.message : String(err);
-        previewContent.innerHTML = `<div class="preview-error">${escHtml(msg)}</div>`;
-        setStatus('error', 'Error');
       } finally {
-        if (gen === renderGen) {
-          rendering = false;
-          showSpinner(false);
-        }
+        rendering = false;
+        showSpinner(false);
+      }
+      // Show whatever corresponds to the current editor value.
+      // If it's not cached yet (source changed while we were rendering), schedule another pass.
+      if (!applyCachedRender(editor.value)) {
+        scheduleRender();
       }
     }
 
