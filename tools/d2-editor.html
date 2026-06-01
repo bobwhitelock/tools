@@ -1533,7 +1533,7 @@ cache -> db: Sync
     // and collapse runs of 3+ blank lines. D2 uses {} for nesting so indentation
     // is purely cosmetic; blank lines are visual separators only.
     function normalizeD2Source(src) {
-      return src.replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+      return src.replace(/^[ \t]+|[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
     }
 
     function showSpinner(show) {
