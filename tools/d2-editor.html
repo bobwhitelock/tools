@@ -572,6 +572,30 @@
     .d2-action-menu button:hover { background: #373e47; }
     .d2-action-menu button.d2-act-x { padding: 6px 9px; color: #8b949e; }
 
+    /* Floating label popup (appears near target node after connect) */
+    .d2-label-popup {
+      position: fixed; z-index: 30; display: none;
+      align-items: center; gap: 4px;
+      background: #1f2330; border: 1px solid #30363d; border-radius: 8px;
+      padding: 4px; box-shadow: 0 4px 14px rgba(0,0,0,.45);
+    }
+    .d2-label-popup.show { display: flex; }
+    .d2-label-input {
+      height: 28px; width: 140px;
+      border: 1px solid #444c56; border-radius: 6px;
+      padding: 0 8px; font-size: 13px; font-family: inherit;
+      background: #2d333b; color: #c9d1d9; outline: none;
+    }
+    .d2-label-input:focus { border-color: var(--accent); }
+    .d2-label-input::placeholder { color: #8b949e; }
+    .d2-label-confirm {
+      background: #2d333b; color: #c9d1d9; border: 1px solid #444c56;
+      border-radius: 6px; padding: 5px 8px; cursor: pointer;
+      display: flex; align-items: center;
+    }
+    .d2-label-confirm:hover { background: #373e47; }
+    .d2-label-confirm svg { width: 14px; height: 14px; }
+
     /* Status bar shown while picking a target */
     .d2-action-bar {
       position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
@@ -937,7 +961,7 @@
 
     /* ── Desktop layout (≥768px) ────────────────────── */
     @media (min-width: 768px) {
-      .desktop-only  { display: flex; }
+      .desktop-only  { display: flex !important; }
       .manage-header { display: flex; }
       .manage-backdrop { display: block; }
       .manage-backdrop.hidden { display: none; }
@@ -1295,19 +1319,15 @@
     </div>
   </div>
 
-  <!-- Connection label modal -->
-  <div class="modal-overlay hidden" id="modal-conn-label">
-    <div class="modal-sheet">
-      <div class="modal-title">Label connection</div>
-      <div class="modal-desc">Optionally enter a label for this connection, or leave blank for none.</div>
-      <input class="modal-input" id="conn-label-input" type="text" placeholder="Optional label…"
-        autocomplete="off" spellcheck="false" autocorrect="off" />
-      <button class="modal-btn modal-btn-accent" id="btn-conn-label-confirm">
-        Add connection
-        <span class="modal-btn-sub">Leave blank for no label</span>
-      </button>
-      <button class="modal-btn modal-cancel" id="btn-conn-label-cancel">Cancel</button>
-    </div>
+  <!-- Floating label popup (shown near target node when connecting) -->
+  <div id="d2-label-popup" class="d2-label-popup">
+    <input id="d2-label-input" class="d2-label-input" type="text"
+      placeholder="Label (optional)" autocomplete="off" spellcheck="false" autocorrect="off" />
+    <button id="d2-label-confirm" class="d2-label-confirm" title="Add connection">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+    </button>
   </div>
 
   <div class="toast" id="toast"></div>
@@ -2484,6 +2504,7 @@ cache -> db: Sync
       previewContent.querySelectorAll('.d2-selected, .d2-action-src')
         .forEach(g => g.classList.remove('d2-selected', 'd2-action-src'));
       clearHover();
+      hideLabelPopup();
     }
 
     function openMenu(g) {
@@ -2523,7 +2544,7 @@ cache -> db: Sync
       if (type === 'connect') {
         if (!targetG || targetG === srcEl) return; // need a different node; keep waiting
         resetInteraction();
-        showConnLabelModal(srcKey, targetKey);
+        showLabelPopup(targetG, srcKey, targetKey);
         return;
       }
 
@@ -2686,39 +2707,44 @@ cache -> db: Sync
     // Close on backdrop tap
     modalEl.addEventListener('click', e => { if (e.target === modalEl) closeResetModal(); });
 
-    // ─── Connection label modal ───────────────────────────────────────────────
-    const connLabelModal  = document.getElementById('modal-conn-label');
-    const connLabelInput  = document.getElementById('conn-label-input');
-    let   pendingConnKeys = null;
+    // ─── Connection label popup (floating, near target node) ─────────────────
+    const labelPopup = document.getElementById('d2-label-popup');
+    const labelInput = document.getElementById('d2-label-input');
+    let pendingConnKeys = null;
 
-    function showConnLabelModal(srcKey, dstKey) {
+    function showLabelPopup(targetG, srcKey, dstKey) {
       pendingConnKeys = { srcKey, dstKey };
-      connLabelInput.value = '';
-      connLabelModal.classList.remove('hidden');
-      connLabelInput.focus();
+      labelInput.value = '';
+      labelPopup.classList.add('show');
+      const pw = labelPopup.offsetWidth, ph = labelPopup.offsetHeight;
+      const r = targetG.getBoundingClientRect();
+      let left = r.left;
+      let top  = r.bottom + 6;
+      left = Math.max(6, Math.min(left, window.innerWidth  - pw - 6));
+      if (top + ph > window.innerHeight - 6) top = Math.max(6, r.top - ph - 6);
+      labelPopup.style.left = left + 'px';
+      labelPopup.style.top  = top  + 'px';
+      labelInput.focus();
     }
 
-    function closeConnLabelModal() {
-      connLabelModal.classList.add('hidden');
+    function hideLabelPopup() {
+      labelPopup.classList.remove('show');
       pendingConnKeys = null;
     }
 
-    document.getElementById('btn-conn-label-confirm').addEventListener('click', () => {
+    function confirmLabel() {
       if (pendingConnKeys) {
         const { srcKey, dstKey } = pendingConnKeys;
-        const label = connLabelInput.value.trim();
-        addConnection(srcKey, dstKey, label || '');
+        addConnection(srcKey, dstKey, labelInput.value.trim());
       }
-      closeConnLabelModal();
-    });
+      hideLabelPopup();
+    }
 
-    document.getElementById('btn-conn-label-cancel').addEventListener('click', closeConnLabelModal);
+    document.getElementById('d2-label-confirm').addEventListener('click', confirmLabel);
 
-    connLabelModal.addEventListener('click', e => { if (e.target === connLabelModal) closeConnLabelModal(); });
-
-    connLabelInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter') document.getElementById('btn-conn-label-confirm').click();
-      if (e.key === 'Escape') closeConnLabelModal();
+    labelInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  confirmLabel();
+      if (e.key === 'Escape') hideLabelPopup();
     });
 
     function applyReset(source, toastMsg) {
