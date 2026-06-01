@@ -891,7 +891,7 @@
     .gh-pr-link.hidden { display: none; }
 
     /* ── Desktop-only elements (hidden on mobile) ─── */
-    .desktop-only    { display: none; }
+    .desktop-only    { display: none !important; }
     .manage-header   { display: none; justify-content: flex-end; margin-bottom: 8px; flex-shrink: 0; }
     .manage-backdrop { display: none; position: fixed; inset: 0; z-index: 99; }
 
@@ -1292,6 +1292,21 @@
         <span class="modal-btn-sub" id="gh-file-confirm-sub"></span>
       </button>
       <button class="modal-btn modal-cancel" id="btn-gh-file-cancel">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Connection label modal -->
+  <div class="modal-overlay hidden" id="modal-conn-label">
+    <div class="modal-sheet">
+      <div class="modal-title">Label connection</div>
+      <div class="modal-desc">Optionally enter a label for this connection, or leave blank for none.</div>
+      <input class="modal-input" id="conn-label-input" type="text" placeholder="Optional label…"
+        autocomplete="off" spellcheck="false" autocorrect="off" />
+      <button class="modal-btn modal-btn-accent" id="btn-conn-label-confirm">
+        Add connection
+        <span class="modal-btn-sub">Leave blank for no label</span>
+      </button>
+      <button class="modal-btn modal-cancel" id="btn-conn-label-cancel">Cancel</button>
     </div>
   </div>
 
@@ -2157,9 +2172,10 @@ cache -> db: Sync
       commitSnap(); saveSource(newSrc); syncControls(newSrc); scheduleRender();
     }
 
-    function addConnection(srcKey, dstKey) {
+    function addConnection(srcKey, dstKey, label) {
       pushUndo();
-      applyEditedSource(editor.value.replace(/\n*$/, '') + '\n' + srcKey + ' -> ' + dstKey + '\n');
+      const edge = label ? `${srcKey} -> ${dstKey}: ${label}` : `${srcKey} -> ${dstKey}`;
+      applyEditedSource(editor.value.replace(/\n*$/, '') + '\n' + edge + '\n');
     }
 
     function moveNode(nodeKey, newParentKey) {
@@ -2480,8 +2496,8 @@ cache -> db: Sync
 
       if (type === 'connect') {
         if (!targetG || targetG === srcEl) return; // need a different node; keep waiting
-        addConnection(srcKey, targetKey);
         resetInteraction();
+        showConnLabelModal(srcKey, targetKey);
         return;
       }
 
@@ -2643,6 +2659,41 @@ cache -> db: Sync
 
     // Close on backdrop tap
     modalEl.addEventListener('click', e => { if (e.target === modalEl) closeResetModal(); });
+
+    // ─── Connection label modal ───────────────────────────────────────────────
+    const connLabelModal  = document.getElementById('modal-conn-label');
+    const connLabelInput  = document.getElementById('conn-label-input');
+    let   pendingConnKeys = null;
+
+    function showConnLabelModal(srcKey, dstKey) {
+      pendingConnKeys = { srcKey, dstKey };
+      connLabelInput.value = '';
+      connLabelModal.classList.remove('hidden');
+      connLabelInput.focus();
+    }
+
+    function closeConnLabelModal() {
+      connLabelModal.classList.add('hidden');
+      pendingConnKeys = null;
+    }
+
+    document.getElementById('btn-conn-label-confirm').addEventListener('click', () => {
+      if (pendingConnKeys) {
+        const { srcKey, dstKey } = pendingConnKeys;
+        const label = connLabelInput.value.trim();
+        addConnection(srcKey, dstKey, label || '');
+      }
+      closeConnLabelModal();
+    });
+
+    document.getElementById('btn-conn-label-cancel').addEventListener('click', closeConnLabelModal);
+
+    connLabelModal.addEventListener('click', e => { if (e.target === connLabelModal) closeConnLabelModal(); });
+
+    connLabelInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('btn-conn-label-confirm').click();
+      if (e.key === 'Escape') closeConnLabelModal();
+    });
 
     function applyReset(source, toastMsg) {
       closeResetModal();
