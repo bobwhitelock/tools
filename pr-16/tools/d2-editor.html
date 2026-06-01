@@ -1351,7 +1351,7 @@ cache -> db: Sync
     let lastCompiled = null; // Last successful d2.compile() result (graph + diagram)
 
     const RENDER_CACHE_MAX = 100;
-    const renderCache = new Map();  // cacheKey → { svg }
+    const renderCache = new Map();  // normalizedSource → { svg, compiled }
 
     // ─── GitHub state ─────────────────────────────────────────────────────────
 
@@ -1529,13 +1529,11 @@ cache -> db: Sync
 
     // ─── Rendering ────────────────────────────────────────────────────────────
 
-    function diagramCacheKey(compiled) {
-      const raw = JSON.stringify({ diagram: compiled.diagram, renderOptions: compiled.renderOptions });
-      let h = 5381;
-      for (let i = 0; i < raw.length; i++) {
-        h = (((h << 5) + h) + raw.charCodeAt(i)) >>> 0; // djb2, 32-bit unsigned
-      }
-      return h.toString(16);
+    // Normalise D2 source for cache keying: strip trailing whitespace per line
+    // and collapse runs of 3+ blank lines. D2 uses {} for nesting so indentation
+    // is purely cosmetic; blank lines are visual separators only.
+    function normalizeD2Source(src) {
+      return src.replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
     }
 
     function showSpinner(show) {
@@ -1547,22 +1545,22 @@ cache -> db: Sync
       rendering = true;
       showSpinner(true);
       try {
-        const compiled = await d2.compile(source);
-        const key = diagramCacheKey(compiled);
+        const key = normalizeD2Source(source);
 
-        let svg;
+        let svg, compiled;
         if (renderCache.has(key)) {
-          svg = renderCache.get(key).svg;
+          ({ svg, compiled } = renderCache.get(key));
         } else {
+          compiled = await d2.compile(source);
           svg = await d2.render(compiled.diagram, compiled.renderOptions);
           if (renderCache.size >= RENDER_CACHE_MAX) {
             renderCache.delete(renderCache.keys().next().value); // evict oldest
           }
-          renderCache.set(key, { svg });
+          renderCache.set(key, { svg, compiled });
         }
 
         currentSvg = svg;
-        lastCompiled = compiled; // always use fresh compile result
+        lastCompiled = compiled;
         previewContent.innerHTML = svg;
         // Make SVG responsive
         const svgEl = previewContent.querySelector('svg');
