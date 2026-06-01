@@ -1540,39 +1540,42 @@ cache -> db: Sync
       spinnerEl.classList.toggle('hidden', !show);
     }
 
+    // Apply a cached render result synchronously. Returns true on cache hit.
+    function applyCachedRender(source) {
+      const key = normalizeD2Source(source);
+      if (!renderCache.has(key)) return false;
+      const { svg, compiled } = renderCache.get(key);
+      currentSvg = svg;
+      lastCompiled = compiled;
+      previewContent.innerHTML = svg;
+      const svgEl = previewContent.querySelector('svg');
+      if (svgEl) {
+        svgEl.removeAttribute('width');
+        svgEl.removeAttribute('height');
+        svgEl.style.width  = '100%';
+        svgEl.style.height = 'auto';
+      }
+      tagShapeGroups(svgEl, compiled);
+      if (typeof resetInteraction === 'function') resetInteraction();
+      setStatus('ready', 'Ready');
+      return true;
+    }
+
     async function doRender(source) {
       if (!d2) return;
       rendering = true;
       showSpinner(true);
       try {
         const key = normalizeD2Source(source);
-
-        let svg, compiled;
-        if (renderCache.has(key)) {
-          ({ svg, compiled } = renderCache.get(key));
-        } else {
-          compiled = await d2.compile(source);
-          svg = await d2.render(compiled.diagram, compiled.renderOptions);
+        if (!renderCache.has(key)) {
+          const compiled = await d2.compile(source);
+          const svg = await d2.render(compiled.diagram, compiled.renderOptions);
           if (renderCache.size >= RENDER_CACHE_MAX) {
             renderCache.delete(renderCache.keys().next().value); // evict oldest
           }
           renderCache.set(key, { svg, compiled });
         }
-
-        currentSvg = svg;
-        lastCompiled = compiled;
-        previewContent.innerHTML = svg;
-        // Make SVG responsive
-        const svgEl = previewContent.querySelector('svg');
-        if (svgEl) {
-          svgEl.removeAttribute('width');
-          svgEl.removeAttribute('height');
-          svgEl.style.width  = '100%';
-          svgEl.style.height = 'auto';
-        }
-        tagShapeGroups(svgEl, compiled);  // annotate SVG nodes with their source keys
-        if (typeof resetInteraction === 'function') resetInteraction(); // SVG replaced — drop stale menu state
-        setStatus('ready', 'Ready');
+        applyCachedRender(source);
       } catch (err) {
         const msg = (err && err.message) ? err.message : String(err);
         previewContent.innerHTML = `<div class="preview-error">${escHtml(msg)}</div>`;
@@ -1585,6 +1588,7 @@ cache -> db: Sync
 
     function scheduleRender() {
       clearTimeout(renderTimer);
+      if (applyCachedRender(editor.value)) return; // instant cache hit — skip debounce and spinner
       showSpinner(true);
       setStatus('loading', 'Rendering…');
       renderTimer = setTimeout(() => doRender(editor.value), DEBOUNCE_MS);
