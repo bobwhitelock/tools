@@ -1609,8 +1609,6 @@ cache -> db: Sync
     function scheduleRender() {
       clearTimeout(renderTimer);
       if (applyCachedRender(editor.value)) return; // instant cache hit — skip debounce and spinner
-      showSpinner(true);
-      setStatus('loading', 'Rendering…');
       renderTimer = setTimeout(() => doRender(editor.value), DEBOUNCE_MS);
     }
 
