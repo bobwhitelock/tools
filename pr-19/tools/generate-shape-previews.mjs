@@ -17,7 +17,7 @@ await d2.ready;
 const svgs = {};
 for (const shape of D2_SHAPES) {
   try {
-    const compiled = await d2.compile(`preview { shape: ${shape} }`);
+    const compiled = await d2.compile(`${shape} { shape: ${shape} }`);
     let svg = await d2.render(compiled.diagram, compiled.renderOptions);
     svg = svg.replace(/\s+width="[^"]*"/, '').replace(/\s+height="[^"]*"/, '');
     svgs[shape] = svg;
