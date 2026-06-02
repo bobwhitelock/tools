@@ -603,41 +603,63 @@
     /* Shape picker popup */
     .d2-shape-picker {
       position: fixed; z-index: 30; display: none;
-      background: #1f2330; border: 1px solid #30363d; border-radius: 8px;
-      padding: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.45); width: 332px;
+      background: #1f2330; border: 1px solid #30363d; border-radius: 10px;
+      padding: 10px; box-shadow: 0 6px 20px rgba(0,0,0,.5);
+      width: min(calc(100vw - 20px), 520px);
+      max-height: min(calc(100vh - 20px), 700px); overflow-y: auto;
     }
     .d2-shape-picker.show { display: block; }
+    .d2-picker-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 2px 8px; margin-bottom: 8px; border-bottom: 1px solid #30363d;
+      font-size: 11px; color: #8b949e; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .d2-picker-close {
+      background: none; border: none; color: #8b949e; cursor: pointer;
+      font-size: 14px; padding: 0 2px; line-height: 1;
+    }
+    .d2-picker-close:hover { color: #c9d1d9; }
     .d2-shape-grid {
-      display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px;
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px;
     }
     .d2-shape-btn {
-      display: flex; flex-direction: column; align-items: center; gap: 2px;
-      padding: 4px 2px; background: #2d333b; color: #c9d1d9;
-      border: 1px solid #444c56; border-radius: 6px;
-      font-size: 10px; cursor: pointer; line-height: 1.2;
-      text-align: center; overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      padding: 6px; background: #2d333b; color: #c9d1d9;
+      border: none; border-radius: 8px; cursor: pointer; overflow: hidden;
+      outline: 2px solid transparent; outline-offset: -2px; transition: background 0.1s;
     }
-    .d2-shape-btn:hover { background: #373e47; border-color: #8b949e; }
-    .d2-shape-btn.d2-shape-active { border-color: var(--accent); background: #1e3a2a; }
-    .d2-shape-btn svg { width: 54px; height: 38px; display: block; }
+    .d2-shape-btn:hover { background: #373e47; }
+    .d2-shape-btn.d2-shape-active { outline-color: var(--accent); background: #1e3a2a; }
+    .d2-shape-btn svg { width: 82px; height: 62px; display: block; }
     .d2-shape-btn svg * { stroke: #c9d1d9 !important; fill: none !important; }
-    .d2-shape-btn svg rect, .d2-shape-btn svg path[fill] { fill: #2d333b !important; }
-    .d2-shape-loading { color: #8b949e; font-size: 12px; padding: 12px; text-align: center; }
+    .d2-shape-btn svg rect.fill-N7 { fill: #2d333b !important; }
     .d2-shape-placeholder {
-      width: 54px; height: 38px; display: flex; align-items: center; justify-content: center;
-      font-size: 9px; color: #8b949e; border: 1px dashed #444c56; border-radius: 4px;
+      width: 82px; height: 62px; display: flex; align-items: center; justify-content: center;
+      font-size: 10px; color: #8b949e; border: 1px dashed #444c56; border-radius: 4px;
     }
 
     /* Add node popup */
     .d2-add-popup {
       position: fixed; z-index: 30; display: none;
-      flex-direction: column; gap: 6px;
-      background: #1f2330; border: 1px solid #30363d; border-radius: 8px;
-      padding: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.45); width: 340px;
+      flex-direction: column; gap: 8px;
+      background: #1f2330; border: 1px solid #30363d; border-radius: 10px;
+      padding: 10px; box-shadow: 0 6px 20px rgba(0,0,0,.5);
+      width: min(calc(100vw - 20px), 520px);
     }
     .d2-add-popup.show { display: flex; }
     .d2-add-row { display: flex; gap: 4px; align-items: center; }
     .d2-add-row .d2-label-input { flex: 1; min-width: 0; }
+
+    @media (max-width: 600px) {
+      .d2-shape-picker, .d2-add-popup {
+        position: fixed; inset: 0; width: 100% !important; max-width: 100% !important;
+        height: 100% !important; max-height: 100% !important;
+        border-radius: 0; overflow-y: auto;
+      }
+      .d2-shape-grid { grid-template-columns: repeat(4, 1fr); }
+      .d2-shape-btn svg { width: 72px; height: 54px; }
+      .d2-shape-placeholder { width: 72px; height: 54px; }
+    }
 
     /* Status bar shown while picking a target */
     .d2-action-bar {
@@ -1433,6 +1455,10 @@
 
   <!-- Add node popup -->
   <div id="d2-add-popup" class="d2-add-popup">
+    <div class="d2-picker-header">
+      <span>Add node</span>
+      <button type="button" class="d2-picker-close" id="d2-add-cancel" aria-label="Cancel">✕</button>
+    </div>
     <div class="d2-add-row">
       <input id="d2-add-input" class="d2-label-input" type="text"
         placeholder="Node name" autocomplete="off" spellcheck="false" autocorrect="off" />
@@ -1447,6 +1473,10 @@
 
   <!-- Shape picker popup -->
   <div id="d2-shape-picker" class="d2-shape-picker">
+    <div class="d2-picker-header">
+      <span>Shape</span>
+      <button type="button" class="d2-picker-close" id="d2-shape-picker-close" aria-label="Close">✕</button>
+    </div>
     <div id="d2-shape-picker-grid" class="d2-shape-grid"></div>
   </div>
 
@@ -1939,8 +1969,10 @@ cache -> db: Sync
 
     /** Push the current editor value onto the undo stack (before a programmatic change). */
     function pushUndo() {
-      const prev = undoStack[undoStack.length - 1] ?? snapValue;
-      if (normalizeD2Source(editor.value) === normalizeD2Source(prev)) return;
+      if (undoStack.length > 0) {
+        const prev = undoStack[undoStack.length - 1];
+        if (normalizeD2Source(editor.value) === normalizeD2Source(prev)) return;
+      }
       undoStack.push(editor.value);
       if (undoStack.length > MAX_UNDO) undoStack.shift();
       redoStack.length = 0;
@@ -3033,6 +3065,11 @@ cache -> db: Sync
     }
 
     function changeNodeShape(nodeKey, shape) {
+      if (shape === 'image') {
+        showToast('image shape requires an "icon" field — edit source directly');
+        resetInteraction();
+        return;
+      }
       const targetObj = findNodeTargetObj(nodeKey);
       if (!targetObj) { showToast('Node not found'); return; }
       const ast = lastCompiled?.graph?.ast;
@@ -3451,6 +3488,7 @@ cache -> db: Sync
     }
 
     function positionPopupNearEl(popup, refEl) {
+      if (window.innerWidth <= 600) return; // full-screen on mobile via CSS
       popup.style.left = '0'; popup.style.top = '0'; // reset before measuring
       const pw = popup.offsetWidth, ph = popup.offsetHeight;
       const r = refEl.getBoundingClientRect();
@@ -3479,13 +3517,14 @@ cache -> db: Sync
       shapePickerKey = null;
     }
 
-    // Close shape picker on outside click
+    // Close shape picker on outside click or close button
     document.addEventListener('click', e => {
       if (!shapePickerEl.classList.contains('show')) return;
       if (!shapePickerEl.contains(e.target) && !actionMenu.contains(e.target)) {
         hideShapePickerPopup();
       }
     }, true);
+    document.getElementById('d2-shape-picker-close').addEventListener('click', hideShapePickerPopup);
 
     // ─── Add node popup ───────────────────────────────────────────────────────
     function showAddPopup() {
@@ -3515,6 +3554,7 @@ cache -> db: Sync
     });
 
     document.getElementById('d2-add-confirm').addEventListener('click', confirmAddNode);
+    document.getElementById('d2-add-cancel').addEventListener('click', hideAddPopup);
     addInputEl.addEventListener('keydown', e => {
       if (e.key === 'Enter')  confirmAddNode();
       if (e.key === 'Escape') hideAddPopup();
