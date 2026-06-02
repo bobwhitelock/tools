@@ -11,13 +11,19 @@ const D2_SHAPES = [
   'stored_data','text',
 ];
 
+const SHAPE_SOURCES = {
+  class:     'class {\n  shape: class\n  +field: type\n  +method()\n}',
+  sql_table: 'sql_table {\n  shape: sql_table\n  id: int\n  name: string\n}',
+};
+
 const d2 = new D2();
 await d2.ready;
 
 const svgs = {};
 for (const shape of D2_SHAPES) {
   try {
-    const compiled = await d2.compile(`${shape} { shape: ${shape} }`);
+    const src = SHAPE_SOURCES[shape] ?? `${shape} { shape: ${shape} }`;
+    const compiled = await d2.compile(src);
     let svg = await d2.render(compiled.diagram, compiled.renderOptions);
     svg = svg.replace(/\s+width="[^"]*"/, '').replace(/\s+height="[^"]*"/, '');
     svgs[shape] = svg;

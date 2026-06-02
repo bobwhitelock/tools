@@ -3624,11 +3624,27 @@ cache -> db: Sync
       popup.style.top  = top  + 'px';
     }
 
+    function getCurrentShape(nodeKey) {
+      const targetObj = findNodeTargetObj(nodeKey);
+      if (!targetObj) return 'rectangle';
+      const ast = lastCompiled?.graph?.ast;
+      if (!ast) return 'rectangle';
+      const declRef = targetObj.references?.find(r => r.map_key_edge_index === -1);
+      if (!declRef?.key?.path?.length) return 'rectangle';
+      const segByte = parseD2Range(Object.values(declRef.key.path[0])[0]?.range)?.start;
+      if (segByte == null) return 'rectangle';
+      const declInfo = findMapKeyAt(ast.nodes, segByte);
+      if (!declInfo) return 'rectangle';
+      const declText = editor.value.slice(declInfo.r.start, declInfo.r.end);
+      const m = declText.match(/\bshape:\s*([^\s}]+)/);
+      return m ? m[1] : 'rectangle';
+    }
+
     function showShapePickerPopup(g) {
       if (!g) return;
       shapePickerKey = g.dataset.d2key;
       shapePickerEl.classList.add('show');
-      buildShapeGrid(shapePickerGrid, null, shape => {
+      buildShapeGrid(shapePickerGrid, getCurrentShape(shapePickerKey), shape => {
         changeNodeShape(shapePickerKey, shape);
         shapePickerEl.classList.remove('show');
         shapePickerKey = null;
