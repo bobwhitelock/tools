@@ -1668,6 +1668,55 @@ cache -> db: Sync
 
     tabBtns.forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
 
+    // ─── Swipe to change tabs (mobile) ────────────────────────────────────────
+
+    const TAB_ORDER = ['editor', 'preview', 'manage'];
+
+    function currentTabName() {
+      const active = document.querySelector('.tab-btn.active');
+      return active ? active.dataset.tab : 'editor';
+    }
+
+    (() => {
+      const mainEl = document.querySelector('.main');
+      let swipeStartX = 0, swipeStartY = 0, swipeActive = false;
+      const SWIPE_THRESHOLD = 60;   // minimum horizontal px to register a swipe
+      const ANGLE_LIMIT     = 0.6;  // tan(~31°): max vertical/horizontal ratio
+
+      mainEl.addEventListener('touchstart', e => {
+        // Ignore multi-touch
+        if (e.touches.length !== 1) { swipeActive = false; return; }
+        swipeStartX = e.touches[0].clientX;
+        swipeStartY = e.touches[0].clientY;
+        swipeActive = true;
+      }, { passive: true });
+
+      mainEl.addEventListener('touchmove', e => {
+        if (!swipeActive || e.touches.length !== 1) return;
+        const dx = e.touches[0].clientX - swipeStartX;
+        const dy = e.touches[0].clientY - swipeStartY;
+        // Cancel if predominantly vertical (user is scrolling content)
+        if (Math.abs(dy) > Math.abs(dx) * (1 / ANGLE_LIMIT)) {
+          swipeActive = false;
+        }
+      }, { passive: true });
+
+      mainEl.addEventListener('touchend', e => {
+        if (!swipeActive) return;
+        swipeActive = false;
+        // Ignore if a modal is open
+        if (document.querySelector('.modal-overlay:not(.hidden)')) return;
+        // Only act on mobile (tab bar is visible)
+        if (window.innerWidth >= 768) return;
+        const dx = e.changedTouches[0].clientX - swipeStartX;
+        if (Math.abs(dx) < SWIPE_THRESHOLD) return;
+        const name = currentTabName();
+        const idx  = TAB_ORDER.indexOf(name);
+        const next = dx < 0 ? idx + 1 : idx - 1;   // swipe left = next tab, swipe right = prev
+        if (next >= 0 && next < TAB_ORDER.length) switchTab(TAB_ORDER[next]);
+      }, { passive: true });
+    })();
+
     // ─── Controls sync helper ─────────────────────────────────────────────────
 
     function syncControls(source) {
