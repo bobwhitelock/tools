@@ -1259,8 +1259,8 @@
           <button type="button" data-act="move" class="d2-act-shape">Move</button>
           <button type="button" data-act="rename" class="d2-act-shape">Rename</button>
           <button type="button" data-act="shape" class="d2-act-shape">Shape</button>
+          <button type="button" data-act="edit-label" class="d2-act-conn">Name</button>
           <button type="button" data-act="delete" class="d2-act-danger">Delete</button>
-          <button type="button" data-act="edit-label" class="d2-act-conn">Edit Label</button>
           <button type="button" class="d2-act-x" data-act="cancel" aria-label="Cancel">✕</button>
         </div>
         <div class="d2-action-bar" id="d2-action-bar">
@@ -2550,10 +2550,10 @@ cache -> db: Sync
           for (const path of g.querySelectorAll('path')) {
             if (path.dataset.hitOverlay) continue;
             const overlay = path.cloneNode(false);
-            overlay.setAttribute('stroke', 'transparent');
-            overlay.setAttribute('stroke-width', '20');
+            overlay.setAttribute('stroke', 'rgba(0,0,0,0)');
+            overlay.setAttribute('stroke-width', '30');
             overlay.setAttribute('fill', 'none');
-            overlay.style.pointerEvents = 'stroke';
+            overlay.style.pointerEvents = 'all';
             overlay.dataset.hitOverlay = '1';
             path.parentNode.insertBefore(overlay, path.nextSibling);
           }
@@ -3198,6 +3198,10 @@ cache -> db: Sync
       // Show buttons appropriate for the clicked element kind
       actionMenu.querySelectorAll('.d2-act-shape').forEach(b => { b.style.display = kind === 'conn' ? 'none' : ''; });
       actionMenu.querySelectorAll('.d2-act-conn').forEach(b => { b.style.display = kind === 'shape' ? 'none' : ''; });
+      if (kind === 'conn') {
+        const editLabelBtn = actionMenu.querySelector('[data-act="edit-label"]');
+        if (editLabelBtn) editLabelBtn.textContent = getEdgeCurrentLabel(g.dataset.d2key) ? 'Rename' : 'Name';
+      }
       // Position the fixed menu just below the node, clamped to the viewport.
       const r = g.getBoundingClientRect();
       actionMenu.classList.add('show'); // show first so we can measure it
