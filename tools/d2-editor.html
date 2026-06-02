@@ -596,6 +596,49 @@
     .d2-label-confirm:hover { background: #373e47; }
     .d2-label-confirm svg { width: 14px; height: 14px; }
 
+    /* Danger button (Delete) in action menu */
+    .d2-action-menu button.d2-act-danger { color: #f85149; }
+    .d2-action-menu button.d2-act-danger:hover { background: #2a1a1a; border-color: #6e2222; }
+
+    /* Shape picker popup */
+    .d2-shape-picker {
+      position: fixed; z-index: 30; display: none;
+      background: #1f2330; border: 1px solid #30363d; border-radius: 8px;
+      padding: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.45); width: 332px;
+    }
+    .d2-shape-picker.show { display: block; }
+    .d2-shape-grid {
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px;
+    }
+    .d2-shape-btn {
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      padding: 4px 2px; background: #2d333b; color: #c9d1d9;
+      border: 1px solid #444c56; border-radius: 6px;
+      font-size: 10px; cursor: pointer; line-height: 1.2;
+      text-align: center; overflow: hidden;
+    }
+    .d2-shape-btn:hover { background: #373e47; border-color: #8b949e; }
+    .d2-shape-btn.d2-shape-active { border-color: var(--accent); background: #1e3a2a; }
+    .d2-shape-btn svg { width: 54px; height: 38px; display: block; }
+    .d2-shape-btn svg * { stroke: #c9d1d9 !important; fill: none !important; }
+    .d2-shape-btn svg rect, .d2-shape-btn svg path[fill] { fill: #2d333b !important; }
+    .d2-shape-loading { color: #8b949e; font-size: 12px; padding: 12px; text-align: center; }
+    .d2-shape-placeholder {
+      width: 54px; height: 38px; display: flex; align-items: center; justify-content: center;
+      font-size: 9px; color: #8b949e; border: 1px dashed #444c56; border-radius: 4px;
+    }
+
+    /* Add node popup */
+    .d2-add-popup {
+      position: fixed; z-index: 30; display: none;
+      flex-direction: column; gap: 6px;
+      background: #1f2330; border: 1px solid #30363d; border-radius: 8px;
+      padding: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.45); width: 340px;
+    }
+    .d2-add-popup.show { display: flex; }
+    .d2-add-row { display: flex; gap: 4px; align-items: center; }
+    .d2-add-row .d2-label-input { flex: 1; min-width: 0; }
+
     /* Status bar shown while picking a target */
     .d2-action-bar {
       position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
@@ -1159,6 +1202,10 @@
         <button class="ctrl-btn" id="btn-redo" title="Redo (Ctrl/Cmd+Shift+Z)" disabled aria-label="Redo">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
         </button>
+        <div class="ctrl-divider"></div>
+        <button class="ctrl-btn" id="btn-add-node" title="Add node" aria-label="Add node">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
       </div>
       <div class="preview-area" id="preview-area">
         <div class="spin-wrap" id="spinner">
@@ -1168,8 +1215,12 @@
         <div class="d2-key-readout" id="d2-key-readout"></div>
         <div class="d2-action-menu" id="d2-action-menu">
           <span class="d2-act-label" id="d2-act-label"></span>
-          <button type="button" data-act="connect">Connect</button>
-          <button type="button" data-act="move">Move</button>
+          <button type="button" data-act="connect" class="d2-act-shape">Connect</button>
+          <button type="button" data-act="move" class="d2-act-shape">Move</button>
+          <button type="button" data-act="rename" class="d2-act-shape">Rename</button>
+          <button type="button" data-act="shape" class="d2-act-shape">Shape</button>
+          <button type="button" data-act="delete" class="d2-act-danger">Delete</button>
+          <button type="button" data-act="edit-label" class="d2-act-conn">Edit Label</button>
           <button type="button" class="d2-act-x" data-act="cancel" aria-label="Cancel">✕</button>
         </div>
         <div class="d2-action-bar" id="d2-action-bar">
@@ -1358,6 +1409,47 @@
     </button>
   </div>
 
+  <!-- Rename node popup -->
+  <div id="d2-rename-popup" class="d2-label-popup">
+    <input id="d2-rename-input" class="d2-label-input" type="text"
+      placeholder="New name" autocomplete="off" spellcheck="false" autocorrect="off" />
+    <button id="d2-rename-confirm" class="d2-label-confirm" title="Rename">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Edge label edit popup -->
+  <div id="d2-edge-label-popup" class="d2-label-popup">
+    <input id="d2-edge-label-input" class="d2-label-input" type="text"
+      placeholder="Edge label (blank to remove)" autocomplete="off" spellcheck="false" autocorrect="off" />
+    <button id="d2-edge-label-confirm" class="d2-label-confirm" title="Set label">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Add node popup -->
+  <div id="d2-add-popup" class="d2-add-popup">
+    <div class="d2-add-row">
+      <input id="d2-add-input" class="d2-label-input" type="text"
+        placeholder="Node name" autocomplete="off" spellcheck="false" autocorrect="off" />
+      <button id="d2-add-confirm" class="d2-label-confirm" title="Add node">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </button>
+    </div>
+    <div id="d2-add-shape-grid" class="d2-shape-grid"></div>
+  </div>
+
+  <!-- Shape picker popup -->
+  <div id="d2-shape-picker" class="d2-shape-picker">
+    <div id="d2-shape-picker-grid" class="d2-shape-grid"></div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script type="module">
@@ -1370,6 +1462,14 @@
 
     const LS_KEY       = 'd2-editor-source';
     const DEBOUNCE_MS  = 300;
+
+    const D2_SHAPES = [
+      'callout','circle','class','cloud','code',
+      'cylinder','diamond','document','hexagon','image',
+      'oval','package','page','parallelogram','person',
+      'queue','rectangle','sql_table','square','step',
+      'stored_data','text',
+    ];
 
     const DEFAULT_SOURCE =
 `vars: {
@@ -2384,6 +2484,80 @@ cache -> db: Sync
 
     // ── Source mutations ────────────────────────────────────────────────────────
 
+    // D2 range strings look like "index,LINE:COL:BYTE-LINE:COL:BYTE"
+    function parseD2Range(r) {
+      const m = String(r).match(/,\d+:\d+:(\d+)-\d+:\d+:(\d+)/);
+      return m ? { start: +m[1], end: +m[2] } : null;
+    }
+
+    // Extract the text value from a D2 path segment object
+    function segVal(seg) {
+      return Object.values(seg)[0]?.value?.[0]?.string ?? null;
+    }
+
+    // Walk ast.nodes recursively, finding map_key whose range starts at startByte
+    function findMapKeyAt(nodes, startByte) {
+      for (const node of (nodes || [])) {
+        const mk = node.map_key;
+        if (!mk) continue;
+        const r = parseD2Range(mk.range);
+        if (r?.start === startByte) return { mk, r };
+        const found = findMapKeyAt(mk.value?.map?.nodes, startByte);
+        if (found) return found;
+      }
+      return null;
+    }
+
+    // Build lookup: edge-segment byte start → {mk, r} for every edge in the AST
+    function buildEdgeSegLookup(astNodes) {
+      const lookup = new Map();
+      function traverse(nodes) {
+        for (const node of (nodes || [])) {
+          const mk = node.map_key;
+          if (!mk) continue;
+          if (mk.edges?.length) {
+            const r = parseD2Range(mk.range);
+            for (const edge of mk.edges) {
+              for (const seg of [...(edge.src?.path || []), ...(edge.dst?.path || [])]) {
+                const sr = parseD2Range(Object.values(seg)[0]?.range);
+                if (sr) lookup.set(sr.start, { mk, r });
+              }
+            }
+          }
+          if (mk.value?.map?.nodes) traverse(mk.value.map.nodes);
+        }
+      }
+      traverse(astNodes);
+      return lookup;
+    }
+
+    // Expand a byte range to full-line boundaries in src
+    function lineRangeInSrc(r, src) {
+      let start = r.start;
+      while (start > 0 && src[start - 1] !== '\n') start--;
+      const nl = src.indexOf('\n', r.end - 1);
+      return { start, end: nl === -1 ? src.length : nl + 1 };
+    }
+
+    // Find the graph object for a given fully-qualified nodeKey.
+    // Falls back to short-id lookup for block-scope nodes.
+    function findNodeTargetObj(nodeKey) {
+      if (!lastCompiled?.graph?.objects) return null;
+      const leaf = nodeKey.includes('.') ? nodeKey.slice(nodeKey.lastIndexOf('.') + 1) : nodeKey;
+      for (const obj of lastCompiled.graph.objects) {
+        for (const ref of (obj.references || [])) {
+          const segs = ref.key?.path;
+          if (!segs?.length) continue;
+          const kpi = Math.min(ref.key_path_index ?? 0, segs.length - 1);
+          if (kpi !== segs.length - 1) continue;
+          const joined = segs.slice(0, kpi + 1).map(segVal).filter(Boolean).join('.');
+          if (joined === nodeKey) return obj;
+        }
+      }
+      const matches = lastCompiled.graph.objects.filter(o => o.id === leaf);
+      return matches.length === 1 ? matches[0] : null;
+    }
+
     function applyEditedSource(newSrc) {
       editor.value = newSrc;
       commitSnap(); saveSource(newSrc); syncControls(newSrc); scheduleRender();
@@ -2397,18 +2571,6 @@ cache -> db: Sync
 
     function moveNode(nodeKey, newParentKey) {
       if (!lastCompiled?.graph?.objects) return;
-
-      // D2 range strings look like "index,LINE:COL:BYTE-LINE:COL:BYTE"
-      function parseD2Range(r) {
-        const m = String(r).match(/,\d+:\d+:(\d+)-\d+:\d+:(\d+)/);
-        return m ? { start: +m[1], end: +m[2] } : null;
-      }
-
-      // Extract the text value from a D2 path segment object
-      // (e.g. { unquoted_string: { range: "...", value: [{ string: "api" }] } })
-      function segVal(seg) {
-        return Object.values(seg)[0]?.value?.[0]?.string ?? null;
-      }
 
       // nodeKey is the SVG/diagram fully-qualified id (e.g. "network.api").
       // graph.objects use short/relative ids, so we match by scanning references
@@ -2462,42 +2624,6 @@ cache -> db: Sync
         const declKeyR = parseD2Range(Object.values(declRef.key.path[0])[0]?.range);
         if (!declKeyR) { showToast('Could not parse declaration range'); return; }
 
-        // Walk ast.nodes recursively, finding map_key whose range starts at startByte
-        function findMapKeyAt(nodes, startByte) {
-          for (const node of (nodes || [])) {
-            const mk = node.map_key;
-            if (!mk) continue;
-            const r = parseD2Range(mk.range);
-            if (r?.start === startByte) return { mk, r };
-            const found = findMapKeyAt(mk.value?.map?.nodes, startByte);
-            if (found) return found;
-          }
-          return null;
-        }
-
-        // Build lookup: edge-segment byte start → {mk, r} for every edge in the AST
-        function buildEdgeSegLookup(astNodes) {
-          const lookup = new Map();
-          function traverse(nodes) {
-            for (const node of (nodes || [])) {
-              const mk = node.map_key;
-              if (!mk) continue;
-              if (mk.edges?.length) {
-                const r = parseD2Range(mk.range);
-                for (const edge of mk.edges) {
-                  for (const seg of [...(edge.src?.path || []), ...(edge.dst?.path || [])]) {
-                    const sr = parseD2Range(Object.values(seg)[0]?.range);
-                    if (sr) lookup.set(sr.start, { mk, r });
-                  }
-                }
-              }
-              if (mk.value?.map?.nodes) traverse(mk.value.map.nodes);
-            }
-          }
-          traverse(astNodes);
-          return lookup;
-        }
-
         // Fully-qualify one edge endpoint path relative to the containing scope.
         // Segments starting with the moved node's leaf are rewritten to newKey;
         // everything else is prefixed with the scope (e.g. "network.db").
@@ -2534,15 +2660,7 @@ cache -> db: Sync
           ).join('\n');
         }
 
-        // Helper: full-line removal range (strip leading whitespace + trailing \n)
-        function lineRange(r) {
-          let start = r.start;
-          while (start > 0 && src[start - 1] !== '\n') start--;
-          const nl = src.indexOf('\n', r.end - 1);
-          return { start, end: nl === -1 ? src.length : nl + 1 };
-        }
-
-        const declLineR = lineRange(fullDeclR);
+        const declLineR = lineRangeInSrc(fullDeclR, src);
         const edgeSegLookup = buildEdgeSegLookup(ast.nodes);
 
         const edits = [];          // source removals / cross-scope substitutions
@@ -2578,7 +2696,7 @@ cache -> db: Sync
             const lastSegR = parseD2Range(Object.values(segs[segs.length - 1])[0]?.range);
             if (!lastSegR) continue;
             const attrValueSuffix = src.slice(lastSegR.end, attrMkR.end);
-            const attrLineR = lineRange(attrMkR);
+            const attrLineR = lineRangeInSrc(attrMkR, src);
             edits.push({ start: attrLineR.start, end: attrLineR.end, replacement: '' });
             appendLines.push(newAttrKey + attrValueSuffix);
           } else {
@@ -2612,7 +2730,7 @@ cache -> db: Sync
               edgeText = edgeText.slice(0, s) + fq + edgeText.slice(e);
             }
 
-            const edgeLineR = lineRange(edgeMkR);
+            const edgeLineR = lineRangeInSrc(edgeMkR, src);
             edits.push({ start: edgeLineR.start, end: edgeLineR.end, replacement: '' });
             appendLines.push(edgeText);
           }
@@ -2656,6 +2774,254 @@ cache -> db: Sync
       applyEditedSource(src);
     }
 
+    function deleteNode(nodeKey) {
+      const targetObj = findNodeTargetObj(nodeKey);
+      if (!targetObj) { showToast('Node not found'); return; }
+      const ast = lastCompiled?.graph?.ast;
+      if (!ast) { showToast('AST unavailable'); return; }
+
+      const src = editor.value;
+      const edits = [];
+      const processedLines = new Set();
+      const edgeSegLookup = buildEdgeSegLookup(ast.nodes);
+
+      for (const ref of (targetObj.references || [])) {
+        const segs = ref.key?.path;
+        if (!segs?.length) continue;
+        if (ref.map_key_edge_index >= 0) {
+          const segByte = parseD2Range(Object.values(segs[0])[0]?.range)?.start;
+          if (segByte == null) continue;
+          const edgeInfo = edgeSegLookup.get(segByte);
+          if (!edgeInfo) continue;
+          const { r } = edgeInfo;
+          if (processedLines.has(r.start)) continue;
+          processedLines.add(r.start);
+          const lr = lineRangeInSrc(r, src);
+          edits.push({ start: lr.start, end: lr.end, replacement: '' });
+        } else {
+          const segByte = parseD2Range(Object.values(segs[0])[0]?.range)?.start;
+          if (segByte == null) continue;
+          const info = findMapKeyAt(ast.nodes, segByte);
+          if (!info) continue;
+          const { r } = info;
+          if (processedLines.has(r.start)) continue;
+          processedLines.add(r.start);
+          const lr = lineRangeInSrc(r, src);
+          edits.push({ start: lr.start, end: lr.end, replacement: '' });
+        }
+      }
+
+      if (!edits.length) { showToast('Nothing to delete'); return; }
+      edits.sort((a, b) => b.start - a.start);
+      pushUndo();
+      let newSrc = src;
+      for (const { start, end, replacement } of edits) {
+        newSrc = newSrc.slice(0, start) + replacement + newSrc.slice(end);
+      }
+      applyEditedSource(newSrc);
+      resetInteraction();
+      showToast('Deleted ' + nodeKey);
+    }
+
+    function deleteEdge(edgeKey) {
+      const ast = lastCompiled?.graph?.ast;
+      if (!ast) { showToast('AST unavailable'); return; }
+      const src = editor.value;
+
+      // Walk AST with scope tracking to match fully-qualified edge keys
+      function walkForEdge(nodes, scope) {
+        const counts = new Map();
+        for (const node of (nodes || [])) {
+          const mk = node.map_key;
+          if (!mk) continue;
+          const mkR = parseD2Range(mk.range);
+          if (mk.edges?.length) {
+            for (const edge of mk.edges) {
+              const srcParts = edge.src?.path?.map(s => segVal(s)).filter(Boolean) ?? [];
+              const dstParts = edge.dst?.path?.map(s => segVal(s)).filter(Boolean) ?? [];
+              const fqSrc = [scope, ...srcParts].filter(Boolean).join('.');
+              const fqDst = [scope, ...dstParts].filter(Boolean).join('.');
+              const pair = `${fqSrc}->${fqDst}`;
+              const n = counts.get(pair) ?? 0;
+              counts.set(pair, n + 1);
+              if (`(${fqSrc} -> ${fqDst})[${n}]` === edgeKey) return mkR;
+            }
+          }
+          if (mk.value?.map?.nodes) {
+            const keyParts = mk.key?.path?.map(s => segVal(s)).filter(Boolean) ?? [];
+            const childScope = [scope, ...keyParts].filter(Boolean).join('.');
+            const found = walkForEdge(mk.value.map.nodes, childScope);
+            if (found) return found;
+          }
+        }
+        return null;
+      }
+
+      const edgeMkR = walkForEdge(ast.nodes, '');
+      if (!edgeMkR) { showToast('Edge not found in source'); return; }
+      const lr = lineRangeInSrc(edgeMkR, src);
+      pushUndo();
+      applyEditedSource(src.slice(0, lr.start) + src.slice(lr.end));
+      resetInteraction();
+      showToast('Deleted edge');
+    }
+
+    function renameNode(nodeKey, newLeafName) {
+      newLeafName = newLeafName.trim();
+      if (!newLeafName) return;
+      const targetObj = findNodeTargetObj(nodeKey);
+      if (!targetObj) { showToast('Node not found'); return; }
+
+      const leaf = nodeKey.includes('.') ? nodeKey.slice(nodeKey.lastIndexOf('.') + 1) : nodeKey;
+      const src = editor.value;
+      const edits = [];
+      const processedBytes = new Set();
+
+      for (const ref of (targetObj.references || [])) {
+        const segs = ref.key?.path;
+        if (!segs?.length) continue;
+        const kpi = Math.min(ref.key_path_index ?? 0, segs.length - 1);
+        const seg = segs[kpi];
+        if (!seg || segVal(seg) !== leaf) continue;
+        const segR = parseD2Range(Object.values(seg)[0]?.range);
+        if (!segR || processedBytes.has(segR.start)) continue;
+        processedBytes.add(segR.start);
+        edits.push({ start: segR.start, end: segR.end, replacement: newLeafName });
+      }
+
+      if (!edits.length) { showToast('No references found to rename'); return; }
+      edits.sort((a, b) => b.start - a.start);
+      pushUndo();
+      let newSrc = src;
+      for (const { start, end, replacement } of edits) {
+        newSrc = newSrc.slice(0, start) + replacement + newSrc.slice(end);
+      }
+      applyEditedSource(newSrc);
+      resetInteraction();
+      showToast('Renamed to ' + newLeafName);
+    }
+
+    function editEdgeLabel(edgeKey, newLabel) {
+      const ast = lastCompiled?.graph?.ast;
+      if (!ast) { showToast('AST unavailable'); return; }
+      newLabel = newLabel.trim();
+
+      // Walk AST to find the edge (same as deleteEdge but also returns edge info)
+      function walkForEdgeFull(nodes, scope) {
+        const counts = new Map();
+        for (const node of (nodes || [])) {
+          const mk = node.map_key;
+          if (!mk) continue;
+          const mkR = parseD2Range(mk.range);
+          if (mk.edges?.length) {
+            for (let ei = 0; ei < mk.edges.length; ei++) {
+              const edge = mk.edges[ei];
+              const srcParts = edge.src?.path?.map(s => segVal(s)).filter(Boolean) ?? [];
+              const dstParts = edge.dst?.path?.map(s => segVal(s)).filter(Boolean) ?? [];
+              const fqSrc = [scope, ...srcParts].filter(Boolean).join('.');
+              const fqDst = [scope, ...dstParts].filter(Boolean).join('.');
+              const pair = `${fqSrc}->${fqDst}`;
+              const n = counts.get(pair) ?? 0;
+              counts.set(pair, n + 1);
+              if (`(${fqSrc} -> ${fqDst})[${n}]` === edgeKey) return { mkR, edge };
+            }
+          }
+          if (mk.value?.map?.nodes) {
+            const keyParts = mk.key?.path?.map(s => segVal(s)).filter(Boolean) ?? [];
+            const childScope = [scope, ...keyParts].filter(Boolean).join('.');
+            const found = walkForEdgeFull(mk.value.map.nodes, childScope);
+            if (found) return found;
+          }
+        }
+        return null;
+      }
+
+      const found = walkForEdgeFull(ast.nodes, '');
+      if (!found) { showToast('Edge not found in source'); return; }
+      const { mkR, edge } = found;
+
+      const src = editor.value;
+      const dstPath = edge.dst?.path ?? [];
+      const lastDstSeg = dstPath[dstPath.length - 1];
+      const dstLastR = lastDstSeg ? parseD2Range(Object.values(lastDstSeg)[0]?.range) : null;
+      if (!dstLastR) { showToast('Could not locate edge endpoints'); return; }
+
+      // Find ':' between dstLastR.end and mkR.end (the label separator, if present)
+      let colonPos = -1;
+      for (let i = dstLastR.end; i < mkR.end; i++) {
+        const ch = src[i];
+        if (ch === ':') { colonPos = i; break; }
+        if (ch !== ' ' && ch !== '\t') break;
+      }
+
+      let newEdgeText;
+      if (colonPos >= 0) {
+        if (newLabel) {
+          newEdgeText = src.slice(mkR.start, colonPos) + ': ' + newLabel;
+        } else {
+          newEdgeText = src.slice(mkR.start, colonPos).trimEnd();
+        }
+      } else {
+        newEdgeText = newLabel
+          ? src.slice(mkR.start, mkR.end) + ': ' + newLabel
+          : src.slice(mkR.start, mkR.end);
+      }
+
+      pushUndo();
+      applyEditedSource(src.slice(0, mkR.start) + newEdgeText + src.slice(mkR.end));
+      resetInteraction();
+      showToast(newLabel ? 'Label set: ' + newLabel : 'Label removed');
+    }
+
+    function addNode(name, shape) {
+      name = name.trim();
+      if (!name) return;
+      pushUndo();
+      const decl = (shape && shape !== 'rectangle')
+        ? `${name} {\n  shape: ${shape}\n}`
+        : name;
+      applyEditedSource(editor.value.replace(/\n*$/, '') + '\n' + decl + '\n');
+      showToast('Added node: ' + name);
+    }
+
+    function changeNodeShape(nodeKey, shape) {
+      const targetObj = findNodeTargetObj(nodeKey);
+      if (!targetObj) { showToast('Node not found'); return; }
+      const ast = lastCompiled?.graph?.ast;
+      if (!ast) { showToast('AST unavailable'); return; }
+
+      const declRef = targetObj.references?.find(r => r.map_key_edge_index === -1);
+      if (!declRef?.key?.path?.length) { showToast('Declaration not found'); return; }
+
+      const segByte = parseD2Range(Object.values(declRef.key.path[0])[0]?.range)?.start;
+      if (segByte == null) { showToast('Declaration range not found'); return; }
+      const declInfo = findMapKeyAt(ast.nodes, segByte);
+      if (!declInfo) { showToast('Could not locate declaration in AST'); return; }
+
+      const src = editor.value;
+      const { r } = declInfo;
+      const declText = src.slice(r.start, r.end);
+
+      let newDeclText;
+      if (declText.includes('{')) {
+        if (/\bshape:\s*\S+/.test(declText)) {
+          newDeclText = declText.replace(/\bshape:\s*\S+/, `shape: ${shape}`);
+        } else {
+          const braceIdx = declText.indexOf('{');
+          newDeclText = declText.slice(0, braceIdx + 1) + '\n  shape: ' + shape + declText.slice(braceIdx + 1);
+        }
+      } else {
+        if (shape === 'rectangle') { resetInteraction(); return; }
+        newDeclText = declText.trimEnd() + ' {\n  shape: ' + shape + '\n}';
+      }
+
+      if (newDeclText === declText) { resetInteraction(); return; }
+      pushUndo();
+      applyEditedSource(src.slice(0, r.start) + newDeclText + src.slice(r.end));
+      resetInteraction();
+      showToast('Shape: ' + shape);
+    }
+
     // ── Tap-to-act interaction ──────────────────────────────────────────────────
     //
     // Tap a shape → a small menu offers actions (Connect / Move). Pick one, then
@@ -2676,13 +3042,19 @@ cache -> db: Sync
         .forEach(g => g.classList.remove('d2-selected', 'd2-action-src'));
       clearHover();
       hideLabelPopup();
+      if (typeof hideRenamePopup === 'function') hideRenamePopup();
+      if (typeof hideEdgeLabelPopup === 'function') hideEdgeLabelPopup();
+      if (typeof hideShapePickerPopup === 'function') hideShapePickerPopup();
     }
 
-    function openMenu(g) {
+    function openMenu(g, kind) {
       resetInteraction();
       selectedEl = g;
       g.classList.add('d2-selected');
       actionLabel.textContent = g.dataset.d2key;
+      // Show buttons appropriate for the clicked element kind
+      actionMenu.querySelectorAll('.d2-act-shape').forEach(b => { b.style.display = kind === 'conn' ? 'none' : ''; });
+      actionMenu.querySelectorAll('.d2-act-conn').forEach(b => { b.style.display = kind === 'shape' ? 'none' : ''; });
       // Position the fixed menu just below the node, clamped to the viewport.
       const r = g.getBoundingClientRect();
       actionMenu.classList.add('show'); // show first so we can measure it
@@ -2734,8 +3106,16 @@ cache -> db: Sync
       const btn = e.target.closest('button');
       if (!btn) return;
       const act = btn.dataset.act;
-      if (act === 'cancel') resetInteraction();
-      else beginAction(act);
+      const key = selectedEl?.dataset.d2key;
+      if (act === 'cancel') { resetInteraction(); }
+      else if (act === 'connect' || act === 'move') { beginAction(act); }
+      else if (act === 'rename') { showRenamePopup(selectedEl); }
+      else if (act === 'shape') { showShapePickerPopup(selectedEl); }
+      else if (act === 'delete') {
+        if (selectedEl?.dataset.d2kind === 'conn') deleteEdge(key);
+        else deleteNode(key);
+      }
+      else if (act === 'edit-label') { showEdgeLabelPopup(selectedEl); }
     });
     document.getElementById('d2-act-cancel').addEventListener('click', resetInteraction);
 
@@ -2745,11 +3125,11 @@ cache -> db: Sync
       if (pendingAction) {
         completeAction(g);
       } else if (g && g.dataset.d2kind === 'shape') {
-        openMenu(g);
-      } else if (g) {
-        showElementKey(g); // edges: just report the key
+        openMenu(g, 'shape');
+      } else if (g && g.dataset.d2kind === 'conn') {
+        openMenu(g, 'conn');
       } else {
-        resetInteraction(); // tapped empty space with menu open → dismiss
+        resetInteraction(); // tapped empty space or no menu open → dismiss
       }
     });
 
@@ -2917,6 +3297,231 @@ cache -> db: Sync
       if (e.key === 'Enter')  confirmLabel();
       if (e.key === 'Escape') hideLabelPopup();
     });
+
+    // ─── Rename popup ─────────────────────────────────────────────────────────
+    const renamePopup = document.getElementById('d2-rename-popup');
+    const renameInput = document.getElementById('d2-rename-input');
+    let pendingRenameKey = null;
+
+    function showRenamePopup(g) {
+      if (!g) return;
+      pendingRenameKey = g.dataset.d2key;
+      const leaf = pendingRenameKey.includes('.')
+        ? pendingRenameKey.slice(pendingRenameKey.lastIndexOf('.') + 1)
+        : pendingRenameKey;
+      renameInput.value = leaf;
+      renamePopup.classList.add('show');
+      const pw = renamePopup.offsetWidth, ph = renamePopup.offsetHeight;
+      const r = g.getBoundingClientRect();
+      let left = r.left;
+      let top  = r.bottom + 6;
+      left = Math.max(6, Math.min(left, window.innerWidth - pw - 6));
+      if (top + ph > window.innerHeight - 6) top = Math.max(6, r.top - ph - 6);
+      renamePopup.style.left = left + 'px';
+      renamePopup.style.top  = top  + 'px';
+      renameInput.focus();
+      renameInput.select();
+    }
+
+    function hideRenamePopup() {
+      renamePopup.classList.remove('show');
+      pendingRenameKey = null;
+    }
+
+    function confirmRename() {
+      if (pendingRenameKey) renameNode(pendingRenameKey, renameInput.value);
+      hideRenamePopup();
+    }
+
+    document.getElementById('d2-rename-confirm').addEventListener('click', confirmRename);
+    renameInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  confirmRename();
+      if (e.key === 'Escape') { hideRenamePopup(); resetInteraction(); }
+    });
+
+    // ─── Edge label popup ─────────────────────────────────────────────────────
+    const edgeLabelPopup = document.getElementById('d2-edge-label-popup');
+    const edgeLabelInput = document.getElementById('d2-edge-label-input');
+    let pendingEdgeLabelKey = null;
+
+    function showEdgeLabelPopup(g) {
+      if (!g) return;
+      pendingEdgeLabelKey = g.dataset.d2key;
+      edgeLabelInput.value = '';
+      edgeLabelPopup.classList.add('show');
+      const pw = edgeLabelPopup.offsetWidth, ph = edgeLabelPopup.offsetHeight;
+      const r = g.getBoundingClientRect();
+      let left = r.left;
+      let top  = r.bottom + 6;
+      left = Math.max(6, Math.min(left, window.innerWidth - pw - 6));
+      if (top + ph > window.innerHeight - 6) top = Math.max(6, r.top - ph - 6);
+      edgeLabelPopup.style.left = left + 'px';
+      edgeLabelPopup.style.top  = top  + 'px';
+      edgeLabelInput.focus();
+    }
+
+    function hideEdgeLabelPopup() {
+      edgeLabelPopup.classList.remove('show');
+      pendingEdgeLabelKey = null;
+    }
+
+    function confirmEdgeLabel() {
+      if (pendingEdgeLabelKey) editEdgeLabel(pendingEdgeLabelKey, edgeLabelInput.value);
+      hideEdgeLabelPopup();
+    }
+
+    document.getElementById('d2-edge-label-confirm').addEventListener('click', confirmEdgeLabel);
+    edgeLabelInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  confirmEdgeLabel();
+      if (e.key === 'Escape') { hideEdgeLabelPopup(); resetInteraction(); }
+    });
+
+    // ─── Shape picker & Add node popup ────────────────────────────────────────
+    let shapePreviewSvgs = null; // lazy-loaded on first shape picker open
+    const shapePickerEl   = document.getElementById('d2-shape-picker');
+    const shapePickerGrid = document.getElementById('d2-shape-picker-grid');
+    const addPopupEl      = document.getElementById('d2-add-popup');
+    const addInputEl      = document.getElementById('d2-add-input');
+    const addShapeGrid    = document.getElementById('d2-add-shape-grid');
+    let addSelectedShape  = 'rectangle';
+    let shapePickerKey    = null;
+
+    async function ensureShapePreviews() {
+      if (shapePreviewSvgs !== null) return;
+      shapePreviewSvgs = {};
+      await Promise.all(D2_SHAPES.map(async shape => {
+        try {
+          const compiled = await d2.compile(`preview { shape: ${shape} }`);
+          let svg = await d2.render(compiled.diagram, compiled.renderOptions);
+          // Strip fixed dimensions so CSS can size them
+          svg = svg.replace(/\s+width="[^"]*"/, '').replace(/\s+height="[^"]*"/, '');
+          shapePreviewSvgs[shape] = svg;
+        } catch { shapePreviewSvgs[shape] = null; }
+      }));
+    }
+
+    function buildShapeGrid(container, selectedShape, onSelect) {
+      container.innerHTML = '';
+      for (const shape of D2_SHAPES) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'd2-shape-btn' + (shape === selectedShape ? ' d2-shape-active' : '');
+        btn.dataset.shape = shape;
+        const svg = shapePreviewSvgs?.[shape];
+        const label = shape.replace(/_/g, ' ');
+        if (svg) {
+          btn.innerHTML = svg + `<span>${label}</span>`;
+        } else {
+          btn.innerHTML = `<div class="d2-shape-placeholder">${label}</div>`;
+        }
+        btn.addEventListener('click', () => {
+          container.querySelectorAll('.d2-shape-btn').forEach(b => b.classList.remove('d2-shape-active'));
+          btn.classList.add('d2-shape-active');
+          onSelect(shape);
+        });
+        container.appendChild(btn);
+      }
+    }
+
+    function positionPopupNearEl(popup, refEl) {
+      popup.style.left = '0'; popup.style.top = '0'; // reset before measuring
+      const pw = popup.offsetWidth, ph = popup.offsetHeight;
+      const r = refEl.getBoundingClientRect();
+      let left = r.left;
+      let top  = r.bottom + 6;
+      left = Math.max(6, Math.min(left, window.innerWidth - pw - 6));
+      if (top + ph > window.innerHeight - 6) top = Math.max(6, r.top - ph - 6);
+      popup.style.left = left + 'px';
+      popup.style.top  = top  + 'px';
+    }
+
+    function showShapePickerPopup(g) {
+      if (!g) return;
+      shapePickerKey = g.dataset.d2key;
+      shapePickerEl.classList.add('show');
+
+      const doShow = () => {
+        buildShapeGrid(shapePickerGrid, null, shape => {
+          changeNodeShape(shapePickerKey, shape);
+          shapePickerEl.classList.remove('show');
+          shapePickerKey = null;
+        });
+        positionPopupNearEl(shapePickerEl, g);
+      };
+
+      if (shapePreviewSvgs !== null) {
+        doShow();
+      } else {
+        shapePickerGrid.innerHTML = '<div class="d2-shape-loading">Loading previews…</div>';
+        positionPopupNearEl(shapePickerEl, g);
+        ensureShapePreviews().then(doShow);
+      }
+    }
+
+    function hideShapePickerPopup() {
+      shapePickerEl.classList.remove('show');
+      shapePickerKey = null;
+    }
+
+    // Close shape picker on outside click
+    document.addEventListener('click', e => {
+      if (!shapePickerEl.classList.contains('show')) return;
+      if (!shapePickerEl.contains(e.target) && !actionMenu.contains(e.target)) {
+        hideShapePickerPopup();
+      }
+    }, true);
+
+    // ─── Add node popup ───────────────────────────────────────────────────────
+    function showAddPopup() {
+      addInputEl.value = '';
+      addSelectedShape = 'rectangle';
+      addPopupEl.classList.add('show');
+
+      const btnAddNode = document.getElementById('btn-add-node');
+      const doShow = () => {
+        buildShapeGrid(addShapeGrid, addSelectedShape, shape => { addSelectedShape = shape; });
+        positionPopupNearEl(addPopupEl, btnAddNode);
+      };
+
+      if (shapePreviewSvgs !== null) {
+        doShow();
+      } else {
+        addShapeGrid.innerHTML = '<div class="d2-shape-loading">Loading previews…</div>';
+        positionPopupNearEl(addPopupEl, btnAddNode);
+        ensureShapePreviews().then(doShow);
+      }
+
+      addInputEl.focus();
+    }
+
+    function hideAddPopup() { addPopupEl.classList.remove('show'); }
+
+    function confirmAddNode() {
+      const name = addInputEl.value.trim();
+      if (name) addNode(name, addSelectedShape);
+      hideAddPopup();
+    }
+
+    document.getElementById('btn-add-node').addEventListener('click', e => {
+      e.stopPropagation();
+      if (addPopupEl.classList.contains('show')) { hideAddPopup(); return; }
+      showAddPopup();
+    });
+
+    document.getElementById('d2-add-confirm').addEventListener('click', confirmAddNode);
+    addInputEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  confirmAddNode();
+      if (e.key === 'Escape') hideAddPopup();
+    });
+
+    // Close add popup on outside click
+    document.addEventListener('click', e => {
+      if (!addPopupEl.classList.contains('show')) return;
+      const btnAddNode = document.getElementById('btn-add-node');
+      if (!addPopupEl.contains(e.target) && e.target !== btnAddNode) {
+        hideAddPopup();
+      }
+    }, true);
 
     function applyReset(source, toastMsg) {
       closeResetModal();
