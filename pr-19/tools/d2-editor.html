@@ -636,18 +636,17 @@
     }
     .d2-shape-btn {
       display: flex; align-items: center; justify-content: center;
-      padding: 6px; background: #2d333b; color: #c9d1d9;
+      padding: 4px; background: #fff;
       border: none; border-radius: 8px; cursor: pointer; overflow: hidden;
       outline: 2px solid transparent; outline-offset: -2px; transition: background 0.1s;
     }
-    .d2-shape-btn:hover { background: #373e47; }
-    .d2-shape-btn.d2-shape-active { outline-color: var(--accent); background: #1e3a2a; }
+    .d2-shape-btn:hover { background: #e8eaed; }
+    .d2-shape-btn.d2-shape-active { outline-color: var(--accent); background: #d4eddf; }
     .d2-shape-btn svg { width: 82px; height: 62px; display: block; }
-    .d2-shape-btn svg * { stroke: #c9d1d9 !important; fill: none !important; }
-    .d2-shape-btn svg rect.fill-N7 { fill: #2d333b !important; }
     .d2-shape-placeholder {
       width: 82px; height: 62px; display: flex; align-items: center; justify-content: center;
       font-size: 10px; color: #8b949e; border: 1px dashed #444c56; border-radius: 4px;
+      background: #2d333b;
     }
 
     /* Add node popup */
@@ -3580,17 +3579,20 @@ cache -> db: Sync
         btn.title = shape.replace(/_/g, ' ');
         const svg = SHAPE_PREVIEW_SVGS?.[shape] ?? (shape === 'image' ? IMAGE_PLACEHOLDER_SVG : null);
         btn.innerHTML = svg ?? `<div class="d2-shape-placeholder">${shape.replace(/_/g, ' ')}</div>`;
-        // Crop D2's built-in ~101px padding so the shape fills the button
+        // Crop D2's built-in ~101px padding so the shape fills the button.
+        // Only apply to D2's large SVGs (viewBox > 200 units); skip custom placeholders.
         const svgEl = btn.querySelector('svg');
         if (svgEl) {
           const vb = svgEl.getAttribute('viewBox');
           if (vb) {
             const parts = vb.trim().split(/\s+/);
             const w = parseFloat(parts[2]), h = parseFloat(parts[3]);
-            const pad = 85;
-            const nw = Math.max(w - 2 * pad, 30), nh = Math.max(h - 2 * pad, 30);
-            svgEl.setAttribute('viewBox', `${(w - nw) / 2} ${(h - nh) / 2} ${nw} ${nh}`);
-            svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+            if (w > 200 && h > 200) {
+              const pad = 80;
+              const nw = w - 2 * pad, nh = h - 2 * pad;
+              svgEl.setAttribute('viewBox', `${(w - nw) / 2} ${(h - nh) / 2} ${nw} ${nh}`);
+              svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+            }
           }
         }
         btn.addEventListener('click', () => {
