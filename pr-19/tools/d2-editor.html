@@ -2984,16 +2984,6 @@ cache -> db: Sync
     // Reposition / dismiss the menu if the diagram re-renders or layout shifts.
     previewArea.addEventListener('scroll', () => { if (!pendingAction) resetInteraction(); });
 
-    // showElementKey reports a key without opening the menu (used for edges).
-    function showElementKey(g) {
-      clearHover();
-      g.classList.add('d2-hover');
-      const isConn = g.dataset.d2kind === 'conn';
-      keyReadout.textContent = (isConn ? 'edge: ' : 'node: ') + g.dataset.d2key;
-      keyReadout.classList.add('show');
-      showToast((isConn ? 'Edge: ' : 'Node: ') + g.dataset.d2key);
-    }
-
     // ─── Export helpers ───────────────────────────────────────────────────────
 
     function download(content, filename, type) {
