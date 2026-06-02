@@ -2528,7 +2528,20 @@ cache -> db: Sync
         if (decoded == null) continue;
         const key = unescapeXml(decoded);
         if (shapeIds.has(key)) { g.dataset.d2key = key; g.dataset.d2kind = 'shape'; tagged++; }
-        else if (connIds.has(key)) { g.dataset.d2key = key; g.dataset.d2kind = 'conn'; tagged++; }
+        else if (connIds.has(key)) {
+          g.dataset.d2key = key; g.dataset.d2kind = 'conn'; tagged++;
+          // Add invisible wide-stroke overlay paths for easier tap/click targeting
+          for (const path of g.querySelectorAll('path')) {
+            if (path.dataset.hitOverlay) continue;
+            const overlay = path.cloneNode(false);
+            overlay.setAttribute('stroke', 'transparent');
+            overlay.setAttribute('stroke-width', '20');
+            overlay.setAttribute('fill', 'none');
+            overlay.style.pointerEvents = 'stroke';
+            overlay.dataset.hitOverlay = '1';
+            path.parentNode.insertBefore(overlay, path.nextSibling);
+          }
+        }
       }
       return tagged;
     }
@@ -3452,10 +3465,59 @@ cache -> db: Sync
     const edgeLabelInput = document.getElementById('d2-edge-label-input');
     let pendingEdgeLabelKey = null;
 
+    function getEdgeCurrentLabel(edgeKey) {
+      const ast = lastCompiled?.graph?.ast;
+      if (!ast) return '';
+      function walkForEdgeFull(nodes, scope) {
+        const counts = new Map();
+        for (const node of (nodes || [])) {
+          const mk = node.map_key;
+          if (!mk) continue;
+          const mkR = parseD2Range(mk.range);
+          if (mk.edges?.length) {
+            for (let ei = 0; ei < mk.edges.length; ei++) {
+              const edge = mk.edges[ei];
+              const srcParts = edge.src?.path?.map(s => segVal(s)).filter(Boolean) ?? [];
+              const dstParts = edge.dst?.path?.map(s => segVal(s)).filter(Boolean) ?? [];
+              const fqSrc = [scope, ...srcParts].filter(Boolean).join('.');
+              const fqDst = [scope, ...dstParts].filter(Boolean).join('.');
+              const pair = `${fqSrc}->${fqDst}`;
+              const n = counts.get(pair) ?? 0;
+              counts.set(pair, n + 1);
+              if (`(${fqSrc} -> ${fqDst})[${n}]` === edgeKey) return { mkR, edge };
+            }
+          }
+          if (mk.value?.map?.nodes) {
+            const keyParts = mk.key?.path?.map(s => segVal(s)).filter(Boolean) ?? [];
+            const childScope = [scope, ...keyParts].filter(Boolean).join('.');
+            const found = walkForEdgeFull(mk.value.map.nodes, childScope);
+            if (found) return found;
+          }
+        }
+        return null;
+      }
+      const found = walkForEdgeFull(ast.nodes, '');
+      if (!found) return '';
+      const { mkR, edge } = found;
+      const src = editor.value;
+      const dstPath = edge.dst?.path ?? [];
+      const lastDstSeg = dstPath[dstPath.length - 1];
+      const dstLastR = lastDstSeg ? parseD2Range(Object.values(lastDstSeg)[0]?.range) : null;
+      if (!dstLastR) return '';
+      let colonPos = -1;
+      for (let i = dstLastR.end; i < mkR.end; i++) {
+        const ch = src[i];
+        if (ch === ':') { colonPos = i; break; }
+        if (ch !== ' ' && ch !== '\t') break;
+      }
+      if (colonPos < 0) return '';
+      return src.slice(colonPos + 1, mkR.end).trim();
+    }
+
     function showEdgeLabelPopup(g) {
       if (!g) return;
       pendingEdgeLabelKey = g.dataset.d2key;
-      edgeLabelInput.value = '';
+      edgeLabelInput.value = getEdgeCurrentLabel(g.dataset.d2key);
       edgeLabelPopup.classList.add('show');
       const pw = edgeLabelPopup.offsetWidth, ph = edgeLabelPopup.offsetHeight;
       const r = g.getBoundingClientRect();
