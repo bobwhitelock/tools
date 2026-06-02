@@ -2866,14 +2866,61 @@ cache -> db: Sync
       showToast('Deleted edge');
     }
 
+    // Returns { labelStart, labelEnd } (byte offsets in src) if the decl has a label,
+    // else null.  Works for both simple `key: Label` and block `key: Label { ... }`.
+    function getDeclLabelRange(targetObj, ast, src) {
+      const declRef = targetObj.references?.find(r => r.map_key_edge_index === -1);
+      if (!declRef?.key?.path?.length || !ast) return null;
+      const seg0 = declRef.key.path[0];
+      const segByte = parseD2Range(Object.values(seg0)[0]?.range)?.start;
+      if (segByte == null) return null;
+      const declInfo = findMapKeyAt(ast.nodes, segByte);
+      if (!declInfo) return null;
+      const { r } = declInfo;
+      const lastSeg = declRef.key.path[declRef.key.path.length - 1];
+      const lastSegR = parseD2Range(Object.values(lastSeg)[0]?.range);
+      if (!lastSegR) return null;
+      const afterKey = src.slice(lastSegR.end, r.end);
+      const colonIdx = afterKey.indexOf(':');
+      if (colonIdx < 0) return null;
+      const braceIdx = afterKey.indexOf('{');
+      const newlineIdx = afterKey.indexOf('\n');
+      if ((braceIdx >= 0 && colonIdx > braceIdx) || (newlineIdx >= 0 && colonIdx > newlineIdx)) return null;
+      // Label text is everything after ':' up to the first '{' or newline
+      const afterColon = afterKey.slice(colonIdx + 1);
+      const braceOrNl = Math.min(
+        afterColon.indexOf('{') < 0 ? Infinity : afterColon.indexOf('{'),
+        afterColon.indexOf('\n') < 0 ? Infinity : afterColon.indexOf('\n'),
+      );
+      const rawLabel = braceOrNl === Infinity ? afterColon : afterColon.slice(0, braceOrNl);
+      const trimmed = rawLabel.trim();
+      if (!trimmed) return null;
+      const labelTextStart = lastSegR.end + colonIdx + 1 + afterColon.indexOf(trimmed);
+      return { labelStart: labelTextStart, labelEnd: labelTextStart + trimmed.length };
+    }
+
     function renameNode(nodeKey, newLeafName) {
       newLeafName = newLeafName.trim();
       if (!newLeafName) return;
       const targetObj = findNodeTargetObj(nodeKey);
       if (!targetObj) { showToast('Node not found'); return; }
 
-      const leaf = nodeKey.includes('.') ? nodeKey.slice(nodeKey.lastIndexOf('.') + 1) : nodeKey;
       const src = editor.value;
+      const ast = lastCompiled?.graph?.ast;
+
+      // If the declaration has a label (e.g. `api: API Server`), update the label only
+      const labelRange = getDeclLabelRange(targetObj, ast, src);
+      if (labelRange) {
+        pushUndo();
+        const newSrc = src.slice(0, labelRange.labelStart) + newLeafName + src.slice(labelRange.labelEnd);
+        applyEditedSource(newSrc);
+        resetInteraction();
+        showToast('Renamed to ' + newLeafName);
+        return;
+      }
+
+      // No label — rename the key identifier in all references
+      const leaf = nodeKey.includes('.') ? nodeKey.slice(nodeKey.lastIndexOf('.') + 1) : nodeKey;
       const edits = [];
       const processedBytes = new Set();
 
@@ -3004,8 +3051,8 @@ cache -> db: Sync
 
       let newDeclText;
       if (declText.includes('{')) {
-        if (/\bshape:\s*\S+/.test(declText)) {
-          newDeclText = declText.replace(/\bshape:\s*\S+/, `shape: ${shape}`);
+        if (/\bshape:\s*[^\s}]+/.test(declText)) {
+          newDeclText = declText.replace(/\bshape:\s*[^\s}]+/, `shape: ${shape}`);
         } else {
           const braceIdx = declText.indexOf('{');
           newDeclText = declText.slice(0, braceIdx + 1) + '\n  shape: ' + shape + declText.slice(braceIdx + 1);
@@ -3299,7 +3346,12 @@ cache -> db: Sync
       const leaf = pendingRenameKey.includes('.')
         ? pendingRenameKey.slice(pendingRenameKey.lastIndexOf('.') + 1)
         : pendingRenameKey;
-      renameInput.value = leaf;
+      // Pre-fill with label text if one exists, otherwise with the key identifier
+      const targetObj = findNodeTargetObj(pendingRenameKey);
+      const ast = lastCompiled?.graph?.ast;
+      const src = editor.value;
+      const labelRange = targetObj ? getDeclLabelRange(targetObj, ast, src) : null;
+      renameInput.value = labelRange ? src.slice(labelRange.labelStart, labelRange.labelEnd) : leaf;
       renamePopup.classList.add('show');
       const pw = renamePopup.offsetWidth, ph = renamePopup.offsetHeight;
       const r = g.getBoundingClientRect();
@@ -3378,8 +3430,9 @@ cache -> db: Sync
 
     async function ensureShapePreviews() {
       if (shapePreviewSvgs !== null) return;
+      if (!d2) return;
       shapePreviewSvgs = {};
-      await Promise.all(D2_SHAPES.map(async shape => {
+      for (const shape of D2_SHAPES) {
         try {
           const compiled = await d2.compile(`preview { shape: ${shape} }`);
           let svg = await d2.render(compiled.diagram, compiled.renderOptions);
@@ -3387,7 +3440,7 @@ cache -> db: Sync
           svg = svg.replace(/\s+width="[^"]*"/, '').replace(/\s+height="[^"]*"/, '');
           shapePreviewSvgs[shape] = svg;
         } catch { shapePreviewSvgs[shape] = null; }
-      }));
+      }
     }
 
     function buildShapeGrid(container, selectedShape, onSelect) {
