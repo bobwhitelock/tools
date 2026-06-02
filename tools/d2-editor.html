@@ -2889,7 +2889,8 @@ cache -> db: Sync
           const lr = lineRangeInSrc(r, src);
           edits.push({ start: lr.start, end: lr.end, replacement: '' });
         } else {
-          const segByte = parseD2Range(Object.values(segs[0])[0]?.range)?.start;
+          const kpi = Math.min(ref.key_path_index ?? 0, segs.length - 1);
+          const segByte = parseD2Range(Object.values(segs[kpi])[0]?.range)?.start;
           if (segByte == null) continue;
           const info = findMapKeyAt(ast.nodes, segByte);
           if (!info) continue;
