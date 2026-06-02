@@ -3579,19 +3579,25 @@ cache -> db: Sync
         btn.title = shape.replace(/_/g, ' ');
         const svg = SHAPE_PREVIEW_SVGS?.[shape] ?? (shape === 'image' ? IMAGE_PLACEHOLDER_SVG : null);
         btn.innerHTML = svg ?? `<div class="d2-shape-placeholder">${shape.replace(/_/g, ' ')}</div>`;
-        // Crop D2's built-in ~101px padding so the shape fills the button.
-        // Only apply to D2's large SVGs (viewBox > 200 units); skip custom placeholders.
-        const svgEl = btn.querySelector('svg');
-        if (svgEl) {
-          const vb = svgEl.getAttribute('viewBox');
-          if (vb) {
-            const parts = vb.trim().split(/\s+/);
-            const w = parseFloat(parts[2]), h = parseFloat(parts[3]);
-            if (w > 200 && h > 200) {
-              const pad = 80;
-              const nw = w - 2 * pad, nh = h - 2 * pad;
-              svgEl.setAttribute('viewBox', `${(w - nw) / 2} ${(h - nh) / 2} ${nw} ${nh}`);
-              svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+        // D2 SVGs are nested: outer <svg viewBox="0 0 W H"> contains an inner
+        // <svg viewBox="-101 -101 W H"> where -101 is D2's built-in padding.
+        // The inner SVG fills 100%×100% of its parent, so only its viewBox
+        // controls what's visible. Crop it to the content area with padding.
+        const outerSvg = btn.querySelector('svg');
+        const innerSvg = outerSvg?.querySelector('svg');
+        if (innerSvg) {
+          const vb = innerSvg.getAttribute('viewBox');
+          const parts = vb ? vb.trim().split(/\s+/).map(Number) : [];
+          if (parts.length === 4) {
+            const [x0, y0, W, H] = parts;
+            if (x0 < 0 && y0 < 0) {
+              const pad = 20;
+              const nw = W + 2 * x0 + 2 * pad;
+              const nh = H + 2 * y0 + 2 * pad;
+              if (nw > 0 && nh > 0) {
+                innerSvg.setAttribute('viewBox', `${-pad} ${-pad} ${nw} ${nh}`);
+                innerSvg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+              }
             }
           }
         }
