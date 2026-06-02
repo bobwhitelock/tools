@@ -914,6 +914,34 @@
     .gh-pr-link .btn-icon { color: var(--accent); }
     .gh-pr-link.hidden { display: none; }
 
+    /* ── Swipe indicator pill ────────────────────────── */
+    .swipe-ind {
+      position: fixed;
+      top: 50%;
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 15px;
+      border-radius: 22px;
+      font-size: 13px;
+      font-weight: 600;
+      pointer-events: none;
+      opacity: 0;
+      background: rgba(26,26,46,0.82);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      color: #fff;
+      white-space: nowrap;
+      box-shadow: 0 3px 14px rgba(0,0,0,.35);
+      transition: background 0.15s;
+    }
+    .swipe-ind.dir-left  { right: 12px; transform: translateY(-50%); }
+    .swipe-ind.dir-right { left:  12px; transform: translateY(-50%); }
+    .swipe-ind.ready { background: var(--accent); }
+    .swipe-ind-arrow { font-size: 16px; }
+    @media (min-width: 768px) { .swipe-ind { display: none !important; } }
+
     /* ── Desktop-only elements (hidden on mobile) ─── */
     .desktop-only    { display: none !important; }
     .manage-header   { display: none; justify-content: flex-end; margin-bottom: 8px; flex-shrink: 0; }
@@ -1670,7 +1698,8 @@ cache -> db: Sync
 
     // ─── Swipe to change tabs (mobile) ────────────────────────────────────────
 
-    const TAB_ORDER = ['editor', 'preview', 'manage'];
+    const TAB_ORDER  = ['editor', 'preview', 'manage'];
+    const TAB_LABELS = { editor: 'Editor', preview: 'Preview', manage: 'Export' };
 
     function currentTabName() {
       const active = document.querySelector('.tab-btn.active');
@@ -1679,41 +1708,115 @@ cache -> db: Sync
 
     (() => {
       const mainEl = document.querySelector('.main');
-      let swipeStartX = 0, swipeStartY = 0, swipeActive = false;
-      const SWIPE_THRESHOLD = 60;   // minimum horizontal px to register a swipe
-      const ANGLE_LIMIT     = 0.6;  // tan(~31°): max vertical/horizontal ratio
+      const THRESHOLD = 0.35; // fraction of panel width needed to commit the switch
+
+      // Indicator pill appended to body so it sits above everything
+      const ind = document.createElement('div');
+      ind.className = 'swipe-ind';
+      ind.innerHTML = '<span class="swipe-ind-arrow"></span><span class="swipe-ind-label"></span>';
+      document.body.appendChild(ind);
+
+      let t0x = 0, t0y = 0;
+      let sw = null;      // active swipe state object (null when idle)
+      let animating = false;
+
+      function adjTab(dir) {
+        const i = TAB_ORDER.indexOf(currentTabName());
+        const j = dir === 'left' ? i + 1 : i - 1;
+        return j >= 0 && j < TAB_ORDER.length ? TAB_ORDER[j] : null;
+      }
 
       mainEl.addEventListener('touchstart', e => {
-        // Ignore multi-touch
-        if (e.touches.length !== 1) { swipeActive = false; return; }
-        swipeStartX = e.touches[0].clientX;
-        swipeStartY = e.touches[0].clientY;
-        swipeActive = true;
+        if (animating || e.touches.length !== 1) return;
+        t0x = e.touches[0].clientX;
+        t0y = e.touches[0].clientY;
+        sw = null;
       }, { passive: true });
 
       mainEl.addEventListener('touchmove', e => {
-        if (!swipeActive || e.touches.length !== 1) return;
-        const dx = e.touches[0].clientX - swipeStartX;
-        const dy = e.touches[0].clientY - swipeStartY;
-        // Cancel if predominantly vertical (user is scrolling content)
-        if (Math.abs(dy) > Math.abs(dx) * (1 / ANGLE_LIMIT)) {
-          swipeActive = false;
+        if (animating || e.touches.length !== 1) return;
+        const dx = e.touches[0].clientX - t0x;
+        const dy = e.touches[0].clientY - t0y;
+
+        // Commit to a horizontal swipe gesture once we have enough lateral movement
+        if (!sw) {
+          if (Math.abs(dx) < 10) return;
+          if (Math.abs(dy) >= Math.abs(dx)) return;               // too vertical
+          if (document.querySelector('.modal-overlay:not(.hidden)')) return;
+          if (window.innerWidth >= 768) return;
+          const dir = dx < 0 ? 'left' : 'right';
+          const targetName = adjTab(dir);
+          if (!targetName) return;
+          const curPanel = document.querySelector('.panel.active');
+          const nxtPanel = document.getElementById(`panel-${targetName}`);
+          const width = mainEl.offsetWidth;
+          // Reveal the incoming panel off-screen without a transition
+          nxtPanel.style.cssText += ';display:flex;transition:none';
+          curPanel.style.transition = 'none';
+          nxtPanel.style.transform = `translateX(${dir === 'left' ? width : -width}px)`;
+          curPanel.style.transform = 'translateX(0)';
+          sw = { dir, targetName, curPanel, nxtPanel, width, dx: 0 };
         }
+
+        const { dir, curPanel, nxtPanel, width } = sw;
+        const clamped = dir === 'left'
+          ? Math.max(-width, Math.min(0, dx))
+          : Math.max(0, Math.min(width, dx));
+        sw.dx = clamped;
+
+        curPanel.style.transform = `translateX(${clamped}px)`;
+        nxtPanel.style.transform = `translateX(${(dir === 'left' ? width : -width) + clamped}px)`;
+
+        // Update indicator pill
+        const progress = Math.abs(clamped) / width;
+        const ready = progress >= THRESHOLD;
+        ind.querySelector('.swipe-ind-arrow').textContent = dir === 'left' ? '←' : '→';
+        ind.querySelector('.swipe-ind-label').textContent = TAB_LABELS[sw.targetName] || sw.targetName;
+        ind.className = `swipe-ind dir-${dir}${ready ? ' ready' : ''}`;
+        ind.style.opacity = String(Math.min(0.45 + progress * 1.6, 1));
       }, { passive: true });
 
-      mainEl.addEventListener('touchend', e => {
-        if (!swipeActive) return;
-        swipeActive = false;
-        // Ignore if a modal is open
-        if (document.querySelector('.modal-overlay:not(.hidden)')) return;
-        // Only act on mobile (tab bar is visible)
-        if (window.innerWidth >= 768) return;
-        const dx = e.changedTouches[0].clientX - swipeStartX;
-        if (Math.abs(dx) < SWIPE_THRESHOLD) return;
-        const name = currentTabName();
-        const idx  = TAB_ORDER.indexOf(name);
-        const next = dx < 0 ? idx + 1 : idx - 1;   // swipe left = next tab, swipe right = prev
-        if (next >= 0 && next < TAB_ORDER.length) switchTab(TAB_ORDER[next]);
+      function settle(commit) {
+        if (!sw) return;
+        ind.style.opacity = '0';
+        const { dir, curPanel, nxtPanel, targetName, width, dx: startDx } = sw;
+        sw = null;
+        animating = true;
+        const endDx  = commit ? (dir === 'left' ? -width : width) : 0;
+        const origin = dir === 'left' ? width : -width;
+        const t0 = performance.now();
+        const DUR = 220;
+
+        function step(now) {
+          const t    = Math.min((now - t0) / DUR, 1);
+          const ease = 1 - Math.pow(1 - t, 3); // cubic ease-out
+          const d    = startDx + (endDx - startDx) * ease;
+          curPanel.style.transform = `translateX(${d}px)`;
+          nxtPanel.style.transform = `translateX(${origin + d}px)`;
+          if (t < 1) { requestAnimationFrame(step); return; }
+          // Clean up inline overrides and hand control back to CSS / switchTab
+          curPanel.style.transform  = '';
+          curPanel.style.transition = '';
+          nxtPanel.style.transform  = '';
+          nxtPanel.style.transition = '';
+          nxtPanel.style.display    = '';
+          if (commit) switchTab(targetName);
+          animating = false;
+        }
+        requestAnimationFrame(step);
+      }
+
+      mainEl.addEventListener('touchend', () => {
+        if (animating || !sw) return;
+        settle(Math.abs(sw.dx) / sw.width >= THRESHOLD);
+      }, { passive: true });
+
+      mainEl.addEventListener('touchcancel', () => {
+        if (!sw) return;
+        ind.style.opacity = '0';
+        sw.curPanel.style.cssText = '';
+        sw.nxtPanel.style.cssText = '';
+        sw = null;
       }, { passive: true });
     })();
 
