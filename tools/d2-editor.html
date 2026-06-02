@@ -641,7 +641,7 @@
       outline: 2px solid transparent; outline-offset: -2px; transition: background 0.1s;
     }
     .d2-shape-btn:hover { background: #e8eaed; }
-    .d2-shape-btn.d2-shape-active { outline-color: var(--accent); background: #d4eddf; }
+    .d2-shape-btn.d2-shape-active { box-shadow: 0 0 0 3px var(--accent); background: #d4eddf; }
     .d2-shape-btn svg { width: 82px; height: 62px; display: block; }
     .d2-shape-placeholder {
       width: 82px; height: 62px; display: flex; align-items: center; justify-content: center;
@@ -3584,6 +3584,7 @@ cache -> db: Sync
         // The inner SVG fills 100%×100% of its parent, so only its viewBox
         // controls what's visible. Crop it to the content area with padding.
         const outerSvg = btn.querySelector('svg');
+        if (outerSvg) outerSvg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
         const innerSvg = outerSvg?.querySelector('svg');
         if (innerSvg) {
           const vb = innerSvg.getAttribute('viewBox');
