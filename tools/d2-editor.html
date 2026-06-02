@@ -596,6 +596,18 @@
     .d2-label-confirm:hover { background: #373e47; }
     .d2-label-confirm svg { width: 14px; height: 14px; }
 
+    .d2-image-icon-popup {
+      position: fixed; z-index: 30; display: none;
+      flex-direction: column; gap: 6px;
+      background: #1f2330; border: 1px solid #30363d; border-radius: 8px;
+      padding: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.45); width: 320px;
+    }
+    .d2-image-icon-popup.show { display: flex; }
+    .d2-image-icon-hint { font-size: 11px; color: #8b949e; }
+    .d2-image-icon-hint a { color: var(--accent); text-decoration: none; }
+    .d2-image-icon-hint a:hover { text-decoration: underline; }
+    .d2-image-icon-input { width: 100% !important; }
+
     /* Danger button (Delete) in action menu */
     .d2-action-menu button.d2-act-danger { color: #f85149; }
     .d2-action-menu button.d2-act-danger:hover { background: #2a1a1a; border-color: #6e2222; }
@@ -1451,6 +1463,23 @@
         <polyline points="20 6 9 17 4 12"/>
       </svg>
     </button>
+  </div>
+
+  <!-- Image shape icon URL popup -->
+  <div id="d2-image-icon-popup" class="d2-image-icon-popup">
+    <div class="d2-image-icon-hint">
+      Icon URL —
+      <a href="https://icons.terrastruct.com/" target="_blank" rel="noopener">browse icons.terrastruct.com</a>
+    </div>
+    <div class="d2-add-row">
+      <input id="d2-image-icon-input" class="d2-label-input d2-image-icon-input" type="url"
+        placeholder="https://icons.terrastruct.com/..." autocomplete="off" />
+      <button id="d2-image-icon-confirm" class="d2-label-confirm" title="Apply">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </button>
+    </div>
   </div>
 
   <!-- Add node popup -->
@@ -3066,8 +3095,7 @@ cache -> db: Sync
 
     function changeNodeShape(nodeKey, shape) {
       if (shape === 'image') {
-        showToast('image shape requires an "icon" field — edit source directly');
-        resetInteraction();
+        showImageIconPopup(nodeKey, selectedEl);
         return;
       }
       const targetObj = findNodeTargetObj(nodeKey);
@@ -3130,6 +3158,7 @@ cache -> db: Sync
       if (typeof hideRenamePopup === 'function') hideRenamePopup();
       if (typeof hideEdgeLabelPopup === 'function') hideEdgeLabelPopup();
       if (typeof hideShapePickerPopup === 'function') hideShapePickerPopup();
+      if (typeof hideImageIconPopup === 'function') hideImageIconPopup();
     }
 
     function openMenu(g, kind) {
@@ -3456,6 +3485,79 @@ cache -> db: Sync
       if (e.key === 'Escape') { hideEdgeLabelPopup(); resetInteraction(); }
     });
 
+    // ─── Image icon URL popup ─────────────────────────────────────────────────
+    const imageIconPopup = document.getElementById('d2-image-icon-popup');
+    const imageIconInput = document.getElementById('d2-image-icon-input');
+    let pendingImageIconKey = null;
+    let pendingImageIconSrcEl = null;
+
+    function showImageIconPopup(nodeKey, srcEl) {
+      pendingImageIconKey = nodeKey;
+      pendingImageIconSrcEl = srcEl;
+      imageIconInput.value = '';
+      imageIconPopup.classList.add('show');
+      const anchor = srcEl || actionMenu;
+      const pw = imageIconPopup.offsetWidth, ph = imageIconPopup.offsetHeight;
+      const r = anchor.getBoundingClientRect();
+      let left = r.left, top = r.bottom + 6;
+      left = Math.max(6, Math.min(left, window.innerWidth - pw - 6));
+      if (top + ph > window.innerHeight - 6) top = Math.max(6, r.top - ph - 6);
+      imageIconPopup.style.left = left + 'px';
+      imageIconPopup.style.top  = top  + 'px';
+      imageIconInput.focus();
+    }
+
+    function hideImageIconPopup() {
+      imageIconPopup.classList.remove('show');
+      pendingImageIconKey = null;
+    }
+
+    function confirmImageIcon() {
+      const url = imageIconInput.value.trim();
+      if (url && pendingImageIconKey) applyImageShape(pendingImageIconKey, url);
+      hideImageIconPopup();
+      resetInteraction();
+    }
+
+    function applyImageShape(nodeKey, iconUrl) {
+      const targetObj = findNodeTargetObj(nodeKey);
+      if (!targetObj) { showToast('Node not found'); return; }
+      const ast = lastCompiled?.graph?.ast;
+      if (!ast) { showToast('AST unavailable'); return; }
+      const declRef = targetObj.references?.find(r => r.map_key_edge_index === -1);
+      if (!declRef?.key?.path?.length) { showToast('Declaration not found'); return; }
+      const segByte = parseD2Range(Object.values(declRef.key.path[0])[0]?.range)?.start;
+      if (segByte == null) return;
+      const declInfo = findMapKeyAt(ast.nodes, segByte);
+      if (!declInfo) return;
+      const src = editor.value;
+      const { r } = declInfo;
+      const declText = src.slice(r.start, r.end);
+      let newDeclText;
+      if (declText.includes('{')) {
+        // Block exists: replace or add shape + icon
+        let t = declText.replace(/\bshape:\s*[^\s}]+/, `shape: image`);
+        if (t === declText) t = t.replace('{', '{\n  shape: image');
+        if (/\bicon:\s*\S+/.test(t)) {
+          t = t.replace(/\bicon:\s*\S+/, `icon: ${iconUrl}`);
+        } else {
+          t = t.replace(/\bshape:\s*image/, `shape: image\n  icon: ${iconUrl}`);
+        }
+        newDeclText = t;
+      } else {
+        newDeclText = declText.trimEnd() + ` {\n  shape: image\n  icon: ${iconUrl}\n}`;
+      }
+      pushUndo();
+      applyEditedSource(src.slice(0, r.start) + newDeclText + src.slice(r.end));
+      showToast('Shape: image');
+    }
+
+    document.getElementById('d2-image-icon-confirm').addEventListener('click', confirmImageIcon);
+    imageIconInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  confirmImageIcon();
+      if (e.key === 'Escape') { hideImageIconPopup(); resetInteraction(); }
+    });
+
     // ─── Shape picker & Add node popup ────────────────────────────────────────
     const shapePickerEl   = document.getElementById('d2-shape-picker');
     const shapePickerGrid = document.getElementById('d2-shape-picker-grid');
@@ -3478,6 +3580,19 @@ cache -> db: Sync
         btn.title = shape.replace(/_/g, ' ');
         const svg = SHAPE_PREVIEW_SVGS?.[shape] ?? (shape === 'image' ? IMAGE_PLACEHOLDER_SVG : null);
         btn.innerHTML = svg ?? `<div class="d2-shape-placeholder">${shape.replace(/_/g, ' ')}</div>`;
+        // Crop D2's built-in ~101px padding so the shape fills the button
+        const svgEl = btn.querySelector('svg');
+        if (svgEl) {
+          const vb = svgEl.getAttribute('viewBox');
+          if (vb) {
+            const parts = vb.trim().split(/\s+/);
+            const w = parseFloat(parts[2]), h = parseFloat(parts[3]);
+            const pad = 85;
+            const nw = Math.max(w - 2 * pad, 30), nh = Math.max(h - 2 * pad, 30);
+            svgEl.setAttribute('viewBox', `${(w - nw) / 2} ${(h - nh) / 2} ${nw} ${nh}`);
+            svgEl.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+          }
+        }
         btn.addEventListener('click', () => {
           container.querySelectorAll('.d2-shape-btn').forEach(b => b.classList.remove('d2-shape-active'));
           btn.classList.add('d2-shape-active');
