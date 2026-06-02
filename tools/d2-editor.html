@@ -3428,6 +3428,9 @@ cache -> db: Sync
     let addSelectedShape  = 'rectangle';
     let shapePickerKey    = null;
 
+    // Placeholder for the 'image' shape (requires an icon URL, can't be previewed standalone)
+    const IMAGE_PLACEHOLDER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 60"><rect width="80" height="60" rx="4" fill="#e8e8e8" stroke="#bbb" stroke-width="1.5"/><circle cx="26" cy="22" r="7" fill="#bbb"/><polyline points="4,56 26,32 44,46 56,36 76,56" fill="#ccc" stroke="#bbb" stroke-width="1.5" stroke-linejoin="round"/><text x="40" y="58" text-anchor="middle" font-size="9" fill="#888" font-family="sans-serif">image</text></svg>`;
+
     function buildShapeGrid(container, selectedShape, onSelect) {
       container.innerHTML = '';
       for (const shape of D2_SHAPES) {
@@ -3435,13 +3438,9 @@ cache -> db: Sync
         btn.type = 'button';
         btn.className = 'd2-shape-btn' + (shape === selectedShape ? ' d2-shape-active' : '');
         btn.dataset.shape = shape;
-        const svg = SHAPE_PREVIEW_SVGS?.[shape];
-        const label = shape.replace(/_/g, ' ');
-        if (svg) {
-          btn.innerHTML = svg + `<span>${label}</span>`;
-        } else {
-          btn.innerHTML = `<div class="d2-shape-placeholder">${label}</div>`;
-        }
+        btn.title = shape.replace(/_/g, ' ');
+        const svg = SHAPE_PREVIEW_SVGS?.[shape] ?? (shape === 'image' ? IMAGE_PLACEHOLDER_SVG : null);
+        btn.innerHTML = svg ?? `<div class="d2-shape-placeholder">${shape.replace(/_/g, ' ')}</div>`;
         btn.addEventListener('click', () => {
           container.querySelectorAll('.d2-shape-btn').forEach(b => b.classList.remove('d2-shape-active'));
           btn.classList.add('d2-shape-active');
