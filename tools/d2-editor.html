@@ -576,11 +576,17 @@
     /* Floating label popup (appears near target node after connect) */
     .d2-label-popup {
       position: fixed; z-index: 30; display: none;
-      align-items: center; gap: 4px;
+      flex-direction: column; gap: 4px;
       background: #1f2330; border: 1px solid #30363d; border-radius: 8px;
-      padding: 4px; box-shadow: 0 4px 14px rgba(0,0,0,.45);
+      padding: 6px; box-shadow: 0 4px 14px rgba(0,0,0,.45);
     }
     .d2-label-popup.show { display: flex; }
+    .d2-popup-hint {
+      color: #8b949e; font-size: 11px; padding: 0 2px;
+    }
+    .d2-label-popup .d2-add-row {
+      display: flex; align-items: center; gap: 4px;
+    }
     .d2-label-input {
       height: 28px; width: 140px;
       border: 1px solid #444c56; border-radius: 6px;
@@ -1434,35 +1440,44 @@
 
   <!-- Floating label popup (shown near target node when connecting) -->
   <div id="d2-label-popup" class="d2-label-popup">
-    <input id="d2-label-input" class="d2-label-input" type="text"
-      placeholder="Label (optional)" autocomplete="off" spellcheck="false" autocorrect="off" />
-    <button id="d2-label-confirm" class="d2-label-confirm" title="Add connection">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="20 6 9 17 4 12"/>
-      </svg>
-    </button>
+    <span class="d2-popup-hint">Label edge (optional)</span>
+    <div class="d2-add-row">
+      <input id="d2-label-input" class="d2-label-input" type="text"
+        placeholder="e.g. HTTP" autocomplete="off" spellcheck="false" autocorrect="off" />
+      <button id="d2-label-confirm" class="d2-label-confirm" title="Add connection">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </button>
+    </div>
   </div>
 
   <!-- Rename node popup -->
   <div id="d2-rename-popup" class="d2-label-popup">
-    <input id="d2-rename-input" class="d2-label-input" type="text"
-      placeholder="New name" autocomplete="off" spellcheck="false" autocorrect="off" />
-    <button id="d2-rename-confirm" class="d2-label-confirm" title="Rename">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="20 6 9 17 4 12"/>
-      </svg>
-    </button>
+    <span class="d2-popup-hint">Label node</span>
+    <div class="d2-add-row">
+      <input id="d2-rename-input" class="d2-label-input" type="text"
+        placeholder="New label" autocomplete="off" spellcheck="false" autocorrect="off" />
+      <button id="d2-rename-confirm" class="d2-label-confirm" title="Rename">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </button>
+    </div>
   </div>
 
   <!-- Edge label edit popup -->
   <div id="d2-edge-label-popup" class="d2-label-popup">
-    <input id="d2-edge-label-input" class="d2-label-input" type="text"
-      placeholder="Edge label (blank to remove)" autocomplete="off" spellcheck="false" autocorrect="off" />
-    <button id="d2-edge-label-confirm" class="d2-label-confirm" title="Set label">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="20 6 9 17 4 12"/>
-      </svg>
-    </button>
+    <span class="d2-popup-hint">Label edge (blank to remove)</span>
+    <div class="d2-add-row">
+      <input id="d2-edge-label-input" class="d2-label-input" type="text"
+        placeholder="e.g. HTTP" autocomplete="off" spellcheck="false" autocorrect="off" />
+      <button id="d2-edge-label-confirm" class="d2-label-confirm" title="Set label">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </button>
+    </div>
   </div>
 
   <!-- Image shape icon URL popup -->
@@ -3213,8 +3228,9 @@ cache -> db: Sync
 
       if (type === 'connect') {
         if (!targetG || targetG === srcEl) return; // need a different node; keep waiting
+        const srcElRef = srcEl; // capture before resetInteraction clears selectedEl
         resetInteraction();
-        showLabelPopup(targetG, srcKey, targetKey);
+        showLabelPopup(srcElRef, targetG, srcKey, targetKey);
         return;
       }
 
@@ -3380,16 +3396,19 @@ cache -> db: Sync
     const labelInput = document.getElementById('d2-label-input');
     let pendingConnKeys = null;
 
-    function showLabelPopup(targetG, srcKey, dstKey) {
+    function showLabelPopup(srcG, targetG, srcKey, dstKey) {
       pendingConnKeys = { srcKey, dstKey };
       labelInput.value = '';
       labelPopup.classList.add('show');
       const pw = labelPopup.offsetWidth, ph = labelPopup.offsetHeight;
-      const r = targetG.getBoundingClientRect();
-      let left = r.left;
-      let top  = r.bottom + 6;
+      const rSrc = srcG.getBoundingClientRect();
+      const rDst = targetG.getBoundingClientRect();
+      const midX = (rSrc.left + rSrc.right + rDst.left + rDst.right) / 4;
+      const midY = (rSrc.top  + rSrc.bottom + rDst.top  + rDst.bottom) / 4;
+      let left = midX - pw / 2;
+      let top  = midY - ph / 2;
       left = Math.max(6, Math.min(left, window.innerWidth  - pw - 6));
-      if (top + ph > window.innerHeight - 6) top = Math.max(6, r.top - ph - 6);
+      top  = Math.max(6, Math.min(top,  window.innerHeight - ph - 6));
       labelPopup.style.left = left + 'px';
       labelPopup.style.top  = top  + 'px';
       labelInput.focus();
