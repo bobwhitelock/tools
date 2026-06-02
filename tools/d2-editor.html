@@ -1457,6 +1457,7 @@
     // @terrastruct/d2-wasm is the underlying compiled WASM binary; @terrastruct/d2
     // is the JS wrapper that provides the clean API used here.
     import { D2 } from 'https://esm.sh/@terrastruct/d2';
+    import { SHAPE_PREVIEW_SVGS } from './d2-shape-previews.js';
 
     // ─── Constants ────────────────────────────────────────────────────────────
 
@@ -3419,7 +3420,6 @@ cache -> db: Sync
     });
 
     // ─── Shape picker & Add node popup ────────────────────────────────────────
-    let shapePreviewSvgs = null; // lazy-loaded on first shape picker open
     const shapePickerEl   = document.getElementById('d2-shape-picker');
     const shapePickerGrid = document.getElementById('d2-shape-picker-grid');
     const addPopupEl      = document.getElementById('d2-add-popup');
@@ -3428,21 +3428,6 @@ cache -> db: Sync
     let addSelectedShape  = 'rectangle';
     let shapePickerKey    = null;
 
-    async function ensureShapePreviews() {
-      if (shapePreviewSvgs !== null) return;
-      if (!d2) return;
-      shapePreviewSvgs = {};
-      for (const shape of D2_SHAPES) {
-        try {
-          const compiled = await d2.compile(`preview { shape: ${shape} }`);
-          let svg = await d2.render(compiled.diagram, compiled.renderOptions);
-          // Strip fixed dimensions so CSS can size them
-          svg = svg.replace(/\s+width="[^"]*"/, '').replace(/\s+height="[^"]*"/, '');
-          shapePreviewSvgs[shape] = svg;
-        } catch { shapePreviewSvgs[shape] = null; }
-      }
-    }
-
     function buildShapeGrid(container, selectedShape, onSelect) {
       container.innerHTML = '';
       for (const shape of D2_SHAPES) {
@@ -3450,7 +3435,7 @@ cache -> db: Sync
         btn.type = 'button';
         btn.className = 'd2-shape-btn' + (shape === selectedShape ? ' d2-shape-active' : '');
         btn.dataset.shape = shape;
-        const svg = shapePreviewSvgs?.[shape];
+        const svg = SHAPE_PREVIEW_SVGS?.[shape];
         const label = shape.replace(/_/g, ' ');
         if (svg) {
           btn.innerHTML = svg + `<span>${label}</span>`;
@@ -3482,23 +3467,12 @@ cache -> db: Sync
       if (!g) return;
       shapePickerKey = g.dataset.d2key;
       shapePickerEl.classList.add('show');
-
-      const doShow = () => {
-        buildShapeGrid(shapePickerGrid, null, shape => {
-          changeNodeShape(shapePickerKey, shape);
-          shapePickerEl.classList.remove('show');
-          shapePickerKey = null;
-        });
-        positionPopupNearEl(shapePickerEl, g);
-      };
-
-      if (shapePreviewSvgs !== null) {
-        doShow();
-      } else {
-        shapePickerGrid.innerHTML = '<div class="d2-shape-loading">Loading previews…</div>';
-        positionPopupNearEl(shapePickerEl, g);
-        ensureShapePreviews().then(doShow);
-      }
+      buildShapeGrid(shapePickerGrid, null, shape => {
+        changeNodeShape(shapePickerKey, shape);
+        shapePickerEl.classList.remove('show');
+        shapePickerKey = null;
+      });
+      positionPopupNearEl(shapePickerEl, g);
     }
 
     function hideShapePickerPopup() {
@@ -3521,18 +3495,8 @@ cache -> db: Sync
       addPopupEl.classList.add('show');
 
       const btnAddNode = document.getElementById('btn-add-node');
-      const doShow = () => {
-        buildShapeGrid(addShapeGrid, addSelectedShape, shape => { addSelectedShape = shape; });
-        positionPopupNearEl(addPopupEl, btnAddNode);
-      };
-
-      if (shapePreviewSvgs !== null) {
-        doShow();
-      } else {
-        addShapeGrid.innerHTML = '<div class="d2-shape-loading">Loading previews…</div>';
-        positionPopupNearEl(addPopupEl, btnAddNode);
-        ensureShapePreviews().then(doShow);
-      }
+      buildShapeGrid(addShapeGrid, addSelectedShape, shape => { addSelectedShape = shape; });
+      positionPopupNearEl(addPopupEl, btnAddNode);
 
       addInputEl.focus();
     }
