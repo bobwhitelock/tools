@@ -12,7 +12,7 @@ const D2_SHAPES = [
 ];
 
 const SHAPE_SOURCES = {
-  class:     'class {\n  shape: class\n  +field: type\n  +method()\n}',
+  class:     'MyClass {\n  shape: class\n  +field: type\n  +method()\n}',
   sql_table: 'sql_table {\n  shape: sql_table\n  id: int\n  name: string\n}',
 };
 
