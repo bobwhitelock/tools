@@ -90,13 +90,6 @@
       transition: background 0.15s, opacity 0.15s;
     }
 
-    .btn-primary {
-      background: var(--accent);
-      color: #fff;
-    }
-
-    .btn-primary:hover { background: var(--accent-dk); }
-
     .btn-secondary {
       background: #e5e7eb;
       color: var(--text);
@@ -254,19 +247,13 @@
       }
 
       .cell {
+        /* height set by beforeprint JS to fill the A4 page */
+        height: var(--print-cell-h, 60px);
         min-height: 0;
-        height: auto;
         border-right: 1px solid #999;
         border-bottom: 1px solid #999;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
-      }
-
-      /* Use aspect-ratio so cells scale with page width */
-      .cell::after {
-        content: '';
-        display: block;
-        padding-bottom: 70%;
       }
     }
   </style>
@@ -277,13 +264,12 @@
   <div class="controls-title">Date Range Calendar</div>
   <div class="field">
     <label for="start-date">Start date</label>
-    <input type="date" id="start-date" />
+    <input type="date" id="start-date" onchange="generate()" />
   </div>
   <div class="field">
     <label for="end-date">End date</label>
-    <input type="date" id="end-date" />
+    <input type="date" id="end-date" onchange="generate()" />
   </div>
-  <button class="btn btn-primary" onclick="generate()">Generate</button>
   <button class="btn btn-secondary" id="print-btn" onclick="window.print()" style="display:none">Print / Save as PDF</button>
   <div class="error-msg" id="error-msg"></div>
 </div>
@@ -465,7 +451,7 @@
     container.appendChild(wrap);
   }
 
-  // Pre-fill today → 4 weeks out as a sensible default
+  // Pre-fill today → 4 weeks out and generate immediately
   (function () {
     const today = new Date();
     const fmt = d => {
@@ -478,7 +464,27 @@
     end.setDate(end.getDate() + 27);
     document.getElementById('start-date').value = fmt(today);
     document.getElementById('end-date').value   = fmt(end);
+    generate();
   })();
+
+  // Before printing: calculate exact cell heights so they fill an A4 portrait page.
+  // A4 with 13mm top+bottom margins = 271mm usable ≈ 1024px at 96 dpi.
+  window.addEventListener('beforeprint', () => {
+    const grid = document.querySelector('.cal-grid');
+    if (!grid) return;
+    const numWeeks    = grid.querySelectorAll('.cell').length / 7;
+    const numMonthHdr = grid.querySelectorAll('.month-hdr').length;
+    const DAY_HDR_H   = 28;   // px — the Mon/Tue/… header row
+    const MONTH_HDR_H = 34;   // px — each MONTH YEAR banner
+    const PAGE_H_PX   = 1024; // 271mm at 96 dpi (A4 portrait minus 13mm margins)
+    const available   = PAGE_H_PX - DAY_HDR_H - numMonthHdr * MONTH_HDR_H;
+    const cellH       = Math.max(20, Math.floor(available / numWeeks));
+    document.documentElement.style.setProperty('--print-cell-h', cellH + 'px');
+  });
+
+  window.addEventListener('afterprint', () => {
+    document.documentElement.style.removeProperty('--print-cell-h');
+  });
 </script>
 </body>
 </html>
