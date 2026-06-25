@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Date Range Calendar</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f0f0ed;
+      --surface: #ffffff;
+      --text: #1a1a1a;
+      --muted: #9ca3af;
+      --border: #d1d5db;
+      --accent: #4f46e5;
+      --accent-dk: #3730a3;
+      --month-color: #8a7a62;
+      --out-bg: #f9f9f8;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 28px 24px;
+      min-height: 100vh;
+    }
+
+    /* ── Controls ─────────────────────────────── */
+    .controls {
+      background: var(--surface);
+      border-radius: 14px;
+      padding: 22px 24px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: flex-end;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 6px rgba(0,0,0,.09);
+    }
+
+    .controls-title {
+      width: 100%;
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .field label {
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+    }
+
+    input[type="date"] {
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 0.9rem;
+      color: var(--text);
+      outline: none;
+      background: #fff;
+      transition: border-color 0.15s;
+      cursor: pointer;
+    }
+
+    input[type="date"]:focus {
+      border-color: var(--accent);
+    }
+
+    .btn {
+      padding: 9px 22px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 0.88rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      transition: background 0.15s, opacity 0.15s;
+    }
+
+    .btn-secondary {
+      background: #e5e7eb;
+      color: var(--text);
+    }
+
+    .btn-secondary:hover { background: #d1d5db; }
+
+    .error-msg {
+      color: #dc2626;
+      font-size: 0.83rem;
+      font-weight: 500;
+      margin-top: -4px;
+      width: 100%;
+    }
+
+    /* ── Calendar wrapper ──────────────────────── */
+    #calendar {
+      max-width: 960px;
+    }
+
+    .cal-wrap {
+      background: var(--surface);
+      border-radius: 14px;
+      padding: 28px 28px 32px;
+      box-shadow: 0 1px 6px rgba(0,0,0,.09);
+    }
+
+    .cal-meta {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 18px;
+    }
+
+    /* ── Grid ─────────────────────────────────── */
+    .cal-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      border-top: 1.5px solid var(--border);
+      border-left: 1.5px solid var(--border);
+    }
+
+    .day-hdr {
+      padding: 7px 0;
+      text-align: center;
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      border-right: 1.5px solid var(--border);
+      border-bottom: 1.5px solid var(--border);
+      background: #fafaf9;
+    }
+
+    .month-hdr {
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 8px 12px 6px;
+      border-right: 1.5px solid var(--border);
+      border-bottom: 1.5px solid var(--border);
+      background: #fafaf9;
+    }
+
+    .month-hdr-name {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--month-color);
+    }
+
+    .month-hdr-year {
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      color: var(--month-color);
+    }
+
+    .cell {
+      min-height: 82px;
+      border-right: 1.5px solid var(--border);
+      border-bottom: 1.5px solid var(--border);
+      position: relative;
+      background: #fff;
+    }
+
+    .cell.out {
+      background: var(--out-bg);
+    }
+
+    .cell-date {
+      position: absolute;
+      top: 5px;
+      right: 7px;
+      font-size: 0.68rem;
+      font-weight: 500;
+      color: var(--text);
+      line-height: 1;
+    }
+
+    .cell.out .cell-date {
+      color: #c4c4c0;
+    }
+
+    /* ── Print ──────────────────────────────────── */
+    @media print {
+      @page {
+        size: A4 portrait;
+        margin: 13mm 12mm 13mm 12mm;
+      }
+
+      body {
+        background: #fff;
+        padding: 0;
+      }
+
+      .controls,
+      .error-msg {
+        display: none !important;
+      }
+
+      #calendar {
+        max-width: 100%;
+      }
+
+      .cal-wrap {
+        box-shadow: none;
+        border-radius: 0;
+        padding: 0;
+      }
+
+      .cal-meta {
+        display: none;
+      }
+
+      .cal-grid {
+        border-top: 1px solid #999;
+        border-left: 1px solid #999;
+      }
+
+      .day-hdr {
+        border-right: 1px solid #999;
+        border-bottom: 1px solid #999;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      .month-hdr {
+        border-right: 1px solid #999;
+        border-bottom: 1px solid #999;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      .cell {
+        /* height set by beforeprint JS to fill the A4 page */
+        height: var(--print-cell-h, 60px);
+        min-height: 0;
+        border-right: 1px solid #999;
+        border-bottom: 1px solid #999;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="controls" id="controls">
+  <div class="controls-title">Date Range Calendar</div>
+  <div class="field">
+    <label for="start-date">Start date</label>
+    <input type="date" id="start-date" onchange="generate()" />
+  </div>
+  <div class="field">
+    <label for="end-date">End date</label>
+    <input type="date" id="end-date" onchange="generate()" />
+  </div>
+  <button class="btn btn-secondary" id="print-btn" onclick="window.print()" style="display:none">Print / Save as PDF</button>
+  <div class="error-msg" id="error-msg"></div>
+</div>
+
+<div id="calendar"></div>
+
+<script>
+  const MAX_WEEKS = 26;
+
+  const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const MONTH_NAMES = [
+    'January','February','March','April','May','June',
+    'July','August','September','October','November','December'
+  ];
+
+  function parseLocalDate(str) {
+    // Avoid timezone shifting by parsing as local
+    const [y, m, d] = str.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  function addDays(date, n) {
+    const d = new Date(date);
+    d.setDate(d.getDate() + n);
+    return d;
+  }
+
+  // Returns the Monday on or before the given date
+  function weekMonday(date) {
+    const d = new Date(date);
+    const dow = d.getDay(); // 0=Sun
+    const diff = dow === 0 ? -6 : 1 - dow;
+    d.setDate(d.getDate() + diff);
+    return d;
+  }
+
+  // Returns the Sunday on or after the given date
+  function weekSunday(date) {
+    const d = new Date(date);
+    const dow = d.getDay();
+    const diff = dow === 0 ? 0 : 7 - dow;
+    d.setDate(d.getDate() + diff);
+    return d;
+  }
+
+  function dateKey(d) {
+    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  }
+
+  function generate() {
+    const startVal = document.getElementById('start-date').value;
+    const endVal   = document.getElementById('end-date').value;
+    const errEl    = document.getElementById('error-msg');
+    errEl.textContent = '';
+
+    if (!startVal || !endVal) {
+      errEl.textContent = 'Please select both a start date and an end date.';
+      return;
+    }
+
+    const rangeStart = parseLocalDate(startVal);
+    const rangeEnd   = parseLocalDate(endVal);
+
+    if (rangeStart > rangeEnd) {
+      errEl.textContent = 'Start date must not be after end date.';
+      return;
+    }
+
+    const gridStart = weekMonday(rangeStart);
+    const gridEnd   = weekSunday(rangeEnd);
+
+    const totalDays  = Math.round((gridEnd - gridStart) / 864e5) + 1;
+    const totalWeeks = totalDays / 7;
+
+    if (totalWeeks > MAX_WEEKS) {
+      errEl.textContent =
+        `That range spans ${Math.ceil(totalWeeks)} weeks. Please choose a shorter range (max ${MAX_WEEKS} weeks / ~6 months).`;
+      return;
+    }
+
+    renderCalendar(gridStart, gridEnd, rangeStart, rangeEnd, totalWeeks);
+    document.getElementById('print-btn').style.display = '';
+  }
+
+  function renderCalendar(gridStart, gridEnd, rangeStart, rangeEnd, totalWeeks) {
+    const container = document.getElementById('calendar');
+    container.innerHTML = '';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'cal-wrap';
+
+    const startStr = rangeStart.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    const endStr   = rangeEnd.toLocaleDateString('en-GB',   { day: 'numeric', month: 'long', year: 'numeric' });
+
+    const meta = document.createElement('div');
+    meta.className = 'cal-meta';
+    meta.textContent = `${startStr} — ${endStr}  ·  ${Math.ceil(totalWeeks)} week${totalWeeks !== 1 ? 's' : ''}`;
+    wrap.appendChild(meta);
+
+    const grid = document.createElement('div');
+    grid.className = 'cal-grid';
+
+    // Day-name header row
+    DAY_NAMES.forEach(name => {
+      const h = document.createElement('div');
+      h.className = 'day-hdr';
+      h.textContent = name;
+      grid.appendChild(h);
+    });
+
+    // Walk week by week
+    let cur = new Date(gridStart);
+    let lastMonthShown = null; // "YYYY-M" key
+
+    while (cur <= gridEnd) {
+      // Collect the 7 days of this week
+      const week = Array.from({ length: 7 }, (_, i) => addDays(cur, i));
+
+      // Determine if we need a month header before this week.
+      // We show one whenever a "new" month first appears among in-range days.
+      // If the month changes mid-week (e.g. Mon=Jun 30, Tue=Jul 1) we show
+      // the header before this week labelled with the month that starts here.
+      let monthToShow = null;
+
+      for (const day of week) {
+        const key = `${day.getFullYear()}-${day.getMonth()}`;
+        if (key !== lastMonthShown) {
+          // Only show header if this day touches or is within range
+          if (day <= rangeEnd && addDays(day, 0) >= gridStart) {
+            // Show month header for the month that begins (or first appears) here
+            monthToShow = { month: day.getMonth(), year: day.getFullYear(), key };
+            break;
+          }
+        }
+      }
+
+      // If the week starts before the range but we haven't shown a header yet, show one
+      if (!monthToShow && lastMonthShown === null) {
+        const d = week[0];
+        monthToShow = { month: d.getMonth(), year: d.getFullYear(), key: `${d.getFullYear()}-${d.getMonth()}` };
+      }
+
+      if (monthToShow) {
+        const mh = document.createElement('div');
+        mh.className = 'month-hdr';
+
+        const nameEl = document.createElement('span');
+        nameEl.className = 'month-hdr-name';
+        nameEl.textContent = MONTH_NAMES[monthToShow.month].toUpperCase();
+
+        const yearEl = document.createElement('span');
+        yearEl.className = 'month-hdr-year';
+        yearEl.textContent = monthToShow.year;
+
+        mh.appendChild(nameEl);
+        mh.appendChild(yearEl);
+        grid.appendChild(mh);
+        lastMonthShown = monthToShow.key;
+      }
+
+      // Render the 7 day cells
+      for (const day of week) {
+        const inRange = day >= rangeStart && day <= rangeEnd;
+        const cell = document.createElement('div');
+        cell.className = 'cell' + (inRange ? '' : ' out');
+
+        const dateEl = document.createElement('span');
+        dateEl.className = 'cell-date';
+        dateEl.textContent = day.getDate();
+        cell.appendChild(dateEl);
+
+        grid.appendChild(cell);
+      }
+
+      cur = addDays(cur, 7);
+    }
+
+    wrap.appendChild(grid);
+    container.appendChild(wrap);
+  }
+
+  // Pre-fill today → 4 weeks out and generate immediately
+  (function () {
+    const today = new Date();
+    const fmt = d => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+    const end = new Date(today);
+    end.setDate(end.getDate() + 27);
+    document.getElementById('start-date').value = fmt(today);
+    document.getElementById('end-date').value   = fmt(end);
+    generate();
+  })();
+
+  // Before printing: calculate exact cell heights so they fill an A4 portrait page.
+  // A4 with 13mm top+bottom margins = 271mm usable ≈ 1024px at 96 dpi.
+  window.addEventListener('beforeprint', () => {
+    const grid = document.querySelector('.cal-grid');
+    if (!grid) return;
+    const numWeeks    = grid.querySelectorAll('.cell').length / 7;
+    const numMonthHdr = grid.querySelectorAll('.month-hdr').length;
+    const DAY_HDR_H   = 28;   // px — the Mon/Tue/… header row
+    const MONTH_HDR_H = 34;   // px — each MONTH YEAR banner
+    const PAGE_H_PX   = 1024; // 271mm at 96 dpi (A4 portrait minus 13mm margins)
+    const available   = PAGE_H_PX - DAY_HDR_H - numMonthHdr * MONTH_HDR_H;
+    const cellH       = Math.max(20, Math.floor(available / numWeeks));
+    document.documentElement.style.setProperty('--print-cell-h', cellH + 'px');
+  });
+
+  window.addEventListener('afterprint', () => {
+    document.documentElement.style.removeProperty('--print-cell-h');
+  });
+</script>
+</body>
+</html>
