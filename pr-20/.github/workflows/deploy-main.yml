@@ -1,0 +1,49 @@
+name: Deploy main branch
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gh-pages-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Deploy to gh-pages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin gh-pages 2>/dev/null || true
+
+          if git ls-remote --heads origin gh-pages | grep -q gh-pages; then
+            git checkout -b gh-pages origin/gh-pages
+          else
+            git checkout --orphan gh-pages
+            git rm -rf . 2>/dev/null || true
+          fi
+
+          # Remove root content but preserve PR preview directories
+          find . -maxdepth 1 \
+            ! -path '.' \
+            ! -name '.git' \
+            ! -name 'pr-*' \
+            -exec rm -rf {} +
+
+          # Extract main branch content into the root
+          git archive ${{ github.sha }} | tar -x
+
+          git add -A
+          git diff --staged --quiet && echo "No changes to deploy" || \
+            git commit -m "Deploy main: ${{ github.sha }}"
+          git push origin gh-pages
